@@ -1,6 +1,10 @@
-name = "historias-ia"
+name = "generador-videos-ia"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
 [ai]
 binding = "AI"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"

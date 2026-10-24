@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0613">
+<title>Crear video · Generador de Videos IA</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+
+<app-header></app-header>
+
+<main class="w-full px-4 sm:px-6 lg:px-10 2xl:px-16 py-6 espacio-footer">
+  <div class="grid gap-6 lg:grid-cols-[minmax(22rem,30%)_1fr] items-start">
+
+    <!-- Panel de creación -->
+    <aside class="lg:sticky lg:top-24 rounded-2xl border border-purple-500/30 bg-purple-950/40 p-4 sm:p-5">
+      <label for="tema" class="flex items-center gap-2 font-semibold text-purple-200 mb-2">
+        <i data-lucide="wand-sparkles" class="w-5 h-5 text-purple-400"></i> ¿Sobre qué quieres el video?
+      </label>
+      <textarea id="tema" rows="3" maxlength="200"
+        placeholder="Ej: crea un video de historia de México, de terror, de anime..."
+        class="w-full rounded-xl bg-[#140a24] border border-purple-500/40 focus:border-purple-400 focus:ring-2 focus:ring-purple-500/50 outline-none p-3 text-purple-50 placeholder-purple-400/60 resize-none"></textarea>
+
+      <div id="chips" class="flex flex-wrap gap-2 mt-3"></div>
+
+      <ul class="mt-4 space-y-1.5 text-sm text-purple-200">
+        <li class="flex items-center gap-2"><i data-lucide="smartphone" class="w-4 h-4 text-purple-400"></i> Formato vertical 9:16 (1080×1920)</li>
+        <li class="flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 text-purple-400"></i> Guion para 2 minutos o más</li>
+        <li class="flex items-center gap-2"><i data-lucide="map-pin" class="w-4 h-4 text-purple-400"></i> Con escenografía detallada por escena</li>
+      </ul>
+
+      <button id="btnGenerar"
+        class="mt-5 w-full flex items-center justify-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 active:scale-[.99] transition font-semibold py-3 text-white brillo disabled:opacity-60">
+        <i data-lucide="sparkles" class="w-5 h-5"></i> Generar 5 historias
+      </button>
+    </aside>
+
+    <!-- Resultados -->
+    <div class="min-w-0">
+      <div id="estado"></div>
+      <section id="resultados" class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,22rem),1fr))]"></section>
+      <section id="guion" class="hidden"></section>
+    </div>
+  </div>
+</main>
+
+<!-- Barra de elección (encima del menú inferior) -->
+<div id="barra" class="hidden fixed inset-x-0 z-30 sobre-footer border-t border-purple-500/40 bg-[#0b0613]/95 backdrop-blur">
+  <div class="w-full flex flex-col sm:flex-row sm:items-center gap-3 px-4 sm:px-6 lg:px-10 2xl:px-16 py-3">
+    <p class="flex items-center gap-2 text-sm text-purple-300 min-w-0 sm:flex-1">
+      <i data-lucide="circle-check" class="w-5 h-5 text-purple-400 shrink-0"></i>
+      <span class="truncate">Elegida: <span id="tituloElegida" class="font-semibold text-purple-100"></span></span>
+    </p>
+    <button id="btnVideo"
+      class="sm:w-auto w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 font-semibold px-6 py-3 text-white brillo disabled:opacity-60">
+      <i data-lucide="video" class="w-5 h-5"></i> Crear video con esta historia
+    </button>
+  </div>
+</div>
+
+<app-footer></app-footer>
+
+<script src="/js/componentes/app-header.js"></script>
+<script src="/js/componentes/app-footer.js"></script>
+<script src="/js/crear.js"></script>
+<script src="/js/comun.js"></script>
+</body>
+</html>

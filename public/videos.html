@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0613">
+<title>Mis videos · Generador de Videos IA</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<link rel="stylesheet" href="/css/estilos.css">
+</head>
+<body>
+
+<app-header></app-header>
+
+<main class="w-full px-4 sm:px-6 lg:px-10 2xl:px-16 py-6 espacio-footer">
+  <h2 class="flex items-center gap-2 text-2xl font-bold mb-1">
+    <i data-lucide="film" class="w-7 h-7 text-purple-400"></i> Mis videos
+  </h2>
+  <p class="text-purple-300 mb-6">Los guiones que generes se guardan aquí, en este dispositivo.</p>
+  <section id="lista" class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,24rem),1fr))]"></section>
+</main>
+
+<app-footer></app-footer>
+
+<script src="/js/componentes/app-header.js"></script>
+<script src="/js/componentes/app-footer.js"></script>
+<script src="/js/videos.js"></script>
+<script src="/js/comun.js"></script>
+</body>
+</html>

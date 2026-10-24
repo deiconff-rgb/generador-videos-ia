@@ -1,0 +1,24 @@
+/* Estilos compartidos por todas las páginas */
+
+/* Tamaño base que crece con la pantalla: celular, PC y TV se leen bien */
+html { font-size: clamp(16px, 0.55vw + 11px, 22px); }
+
+body {
+  min-height: 100vh;
+  color: #faf5ff;
+  background: radial-gradient(1200px 600px at 50% -10%, #3b0a6b66, transparent), #0b0613;
+}
+
+/* Resplandor morado */
+.brillo { box-shadow: 0 0 24px #a855f766; }
+
+/* Foco visible (útil con control remoto de TV y teclado) */
+a:focus-visible, button:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid #e9d5ff;
+  outline-offset: 2px;
+}
+
+/* Alto del menú inferior (footer) para que nada quede tapado */
+:root { --alto-footer: 4.5rem; }
+.espacio-footer { padding-bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom) + 1.5rem); }
+.sobre-footer { bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom)); }
