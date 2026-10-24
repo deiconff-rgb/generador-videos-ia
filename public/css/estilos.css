@@ -20,5 +20,10 @@ a:focus-visible, button:focus-visible, textarea:focus-visible, summary:focus-vis
 
 /* Alto del menú inferior (footer) para que nada quede tapado */
 :root { --alto-footer: 4.5rem; }
-.espacio-footer { padding-bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom) + 1.5rem); }
+.espacio-footer { padding-bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom) + 1.5rem) !important; }
+/* Cuando está visible la barra "Elegida", se agrega espacio extra para que no tape nada */
+body.con-barra .espacio-footer { padding-bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom) + 9rem) !important; }
+@media (min-width: 640px) {
+  body.con-barra .espacio-footer { padding-bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom) + 6rem) !important; }
+}
 .sobre-footer { bottom: calc(var(--alto-footer) + env(safe-area-inset-bottom)); }

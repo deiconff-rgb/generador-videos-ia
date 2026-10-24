@@ -18,7 +18,13 @@
     ["Ciencia ficción", "rocket"],
   ];
 
+  function mostrarBarra(si) {
+    $("barra").classList.toggle("hidden", !si);
+    document.body.classList.toggle("con-barra", !!si);
+  }
+
   let historias = [];
+  let ultimoGuion = null;
   let elegida = -1;
   let temaActual = "";
   let ocupado = false;
@@ -122,7 +128,7 @@
     elegida = i;
     pintarHistorias();
     $("tituloElegida").textContent = historias[i].titulo || "";
-    $("barra").classList.remove("hidden");
+    mostrarBarra(true);
   }
 
   async function generar() {
@@ -135,7 +141,7 @@
     elegida = -1;
     historias = [];
     $("btnGenerar").disabled = true;
-    $("barra").classList.add("hidden");
+    mostrarBarra(false);
     $("guion").classList.add("hidden");
     $("guion").innerHTML = "";
     $("resultados").classList.remove("hidden");
@@ -147,6 +153,9 @@
       historias = data.historias;
       estado();
       pintarHistorias();
+      if (data.incompleto) {
+        estado("error", "La IA solo pudo crear " + historias.length + " de 5 historias. Puedes elegir una o tocar “Generar 5 historias” otra vez.");
+      }
     } catch (e) {
       estado("error", "No se pudieron generar las historias: " + e.message);
       pintarVacio();
@@ -200,11 +209,12 @@
       </div>
       ${aviso}
       <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,24rem),1fr))]">${escenas}</div>
-      <div class="mt-6 rounded-2xl border border-dashed border-purple-500/40 p-5 text-purple-200">
-        <p class="flex items-center gap-2 font-semibold"><i data-lucide="video" class="w-5 h-5 text-purple-400"></i> Siguiente paso: voz, imágenes y video</p>
-        <p class="text-sm mt-1 text-purple-300">Aquí se generarán las voces por personaje, una imagen vertical por escena y el montaje del MP4. Está en construcción.</p>
-        <button disabled class="mt-3 flex items-center gap-2 rounded-xl bg-purple-500/40 px-5 py-2.5 text-white/80 cursor-not-allowed">
-          <i data-lucide="lock" class="w-4 h-4"></i> Generar video (próximamente)</button>
+      <div class="mt-6 rounded-2xl border border-purple-500/40 bg-purple-950/40 p-5">
+        <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="video" class="w-5 h-5 text-purple-400"></i> Generar el video</p>
+        <p class="text-sm mt-1 text-purple-300">La IA creará una imagen vertical por escena y la voz de cada diálogo, y tu navegador armará el video 9:16 con subtítulos. Mantén esta pantalla abierta y encendida mientras se graba (dura lo mismo que el video).</p>
+        <button id="btnGenerarVideo" class="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 px-6 py-3 font-semibold text-white brillo">
+          <i data-lucide="clapperboard" class="w-5 h-5"></i> Generar video 9:16</button>
+        <div id="panelVideo" class="mt-5"></div>
       </div>`;
     iconos();
   }
@@ -219,10 +229,11 @@
       const g = await llamar("/api/guion", { tema: temaActual, historia: h });
       g.personajes = h.personajes || [];
       g.estilo_visual = h.estilo_visual || "";
+      ultimoGuion = g;
       const guardado = guardarGuion(g);
       estado();
       $("resultados").classList.add("hidden");
-      $("barra").classList.add("hidden");
+      mostrarBarra(false);
       $("guion").classList.remove("hidden");
       pintarGuion(g, guardado);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -236,7 +247,7 @@
   function volver() {
     $("guion").classList.add("hidden");
     $("resultados").classList.remove("hidden");
-    $("barra").classList.remove("hidden");
+    mostrarBarra(true);
     estado();
   }
 
@@ -259,6 +270,10 @@
   $("guion").addEventListener("click", (e) => {
     if (e.target.closest("#btnVolver")) volver();
     if (e.target.closest("#btnRegenerar")) crearGuion();
+    if (e.target.closest("#btnGenerarVideo")) {
+      if (!window.GeneradorVideo) { estado("error", "No se cargó el generador de video. Recarga la página."); return; }
+      if (ultimoGuion) window.GeneradorVideo.generar(ultimoGuion, $("panelVideo"));
+    }
   });
 
   pintarChips();

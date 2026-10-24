@@ -7,6 +7,9 @@ const MODELOS = [
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 ];
 
+const MODELO_IMAGEN = "@cf/black-forest-labs/flux-1-schnell";
+const MODELO_VOZ = "@cf/myshell-ai/melotts";
+
 const FORMATO = "9:16";
 const RESOLUCION = "1080x1920";
 const MIN_PALABRAS = 300; // 300 palabras a ~150 palabras/minuto = 2 minutos
@@ -55,11 +58,21 @@ const SISTEMA =
   "Eres guionista y director de arte de videos verticales 9:16 para Reels, Shorts y TikTok. Respondes SOLO con JSON válido, sin texto extra, en español.";
 
 // ---------- Paso 1: 5 ideas con sinopsis y escenografía ----------
-async function generarHistorias(env, tema) {
-  const pedido = `Crea 5 ideas de video distintas sobre: ${tema}.
-Cada idea debe servir para un video vertical 9:16 de al menos 2 minutos.
+// Se hace UNA llamada por idea (en paralelo) porque así la IA siempre entrega las 5.
+const TONOS = [
+  "épico y dramático",
+  "misterioso y de suspenso",
+  "emotivo y humano",
+  "de aventura y acción",
+  "con un giro final inesperado",
+];
+
+async function generarUna(env, tema, tono, numero) {
+  const pedido = `Crea UNA idea de video sobre: ${tema}.
+Es la idea ${numero} de 5: debe tener un tono ${tono} y ser distinta de las otras cuatro.
+Debe servir para un video vertical 9:16 de al menos 2 minutos.
 Formato exacto:
-{"historias":[{"titulo":"","sinopsis":"","escenografia":"","estilo_visual":"","personajes":[{"nombre":"","genero":"hombre|mujer","descripcion":""}],"dialogo_muestra":[{"personaje":"","texto":""}]}]}
+{"historia":{"titulo":"","sinopsis":"","escenografia":"","estilo_visual":"","personajes":[{"nombre":"","genero":"hombre|mujer","descripcion":""}],"dialogo_muestra":[{"personaje":"","texto":""}]}}
 Reglas:
 - sinopsis: de 4 a 6 frases que expliquen de qué trata, cómo empieza, cuál es el conflicto y cómo termina.
 - escenografia: de 3 a 4 frases que describan cómo se verá: lugares, época, iluminación, colores y ambiente.
@@ -70,14 +83,25 @@ Reglas:
   let ultimoError = "Sin respuesta";
   for (const modelo of MODELOS) {
     try {
-      const obj = await pedirIA(env, modelo, SISTEMA, pedido, 4500);
-      if (!obj.historias || !obj.historias.length) throw new Error("JSON sin historias");
-      return obj;
+      const obj = await pedirIA(env, modelo, SISTEMA, pedido, 1800);
+      const h = obj.historia || (obj.historias && obj.historias[0]) || (obj.titulo ? obj : null);
+      if (!h || !h.titulo) throw new Error("JSON sin historia");
+      return h;
     } catch (e) {
       ultimoError = modelo + ": " + String(e.message || e);
     }
   }
   throw new Error(ultimoError);
+}
+
+async function generarHistorias(env, tema) {
+  const res = await Promise.allSettled(TONOS.map((t, i) => generarUna(env, tema, t, i + 1)));
+  const ok = res.filter((r) => r.status === "fulfilled").map((r) => r.value);
+  if (!ok.length) {
+    const primero = res.find((r) => r.status === "rejected");
+    throw new Error(primero ? String(primero.reason.message || primero.reason) : "Sin respuesta");
+  }
+  return { historias: ok, incompleto: ok.length < TONOS.length };
 }
 
 // ---------- Paso 2: guion completo de 2+ minutos ----------
@@ -131,6 +155,49 @@ Reglas:
   };
 }
 
+// ---------- Paso 3: imagen por escena y voz por diálogo ----------
+function aBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(bin);
+}
+
+async function generarImagen(env, prompt) {
+  const p = String(prompt).slice(0, 1500) +
+    ", vertical cinematic composition, highly detailed, no text, no watermark";
+  let ultimo = new Error("Sin imagen");
+  for (let intento = 0; intento < 2; intento++) {
+    try {
+      const r = await env.AI.run(MODELO_IMAGEN, {
+        prompt: p,
+        steps: 4,
+        seed: Math.floor(Math.random() * 1000000),
+      });
+      const img = r && (r.image || (typeof r === "string" ? r : null));
+      if (!img) throw new Error("La IA no devolvió imagen");
+      return img;
+    } catch (e) {
+      ultimo = e;
+    }
+  }
+  throw ultimo;
+}
+
+async function generarVoz(env, texto, lang) {
+  const r = await env.AI.run(MODELO_VOZ, {
+    prompt: String(texto).slice(0, 500),
+    lang: lang || "es",
+  });
+  if (r && r.audio) return r.audio;
+  if (typeof r === "string") return r;
+  if (r instanceof ArrayBuffer) return aBase64(r);
+  if (r && typeof r.getReader === "function") return aBase64(await new Response(r).arrayBuffer());
+  throw new Error("La IA no devolvió audio");
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -154,6 +221,14 @@ export default {
         if (url.pathname === "/api/guion") {
           if (!tema || !cuerpo.historia) return json({ error: "Falta el tema o la historia" }, 400);
           return json(await generarGuion(env, tema, cuerpo.historia));
+        }
+        if (url.pathname === "/api/imagen") {
+          if (!cuerpo.prompt) return json({ error: "Falta el prompt de la imagen" }, 400);
+          return json({ image: await generarImagen(env, cuerpo.prompt) });
+        }
+        if (url.pathname === "/api/voz") {
+          if (!cuerpo.texto) return json({ error: "Falta el texto" }, 400);
+          return json({ audio: await generarVoz(env, cuerpo.texto, cuerpo.lang) });
         }
         return json({ error: "Ruta no encontrada" }, 404);
       } catch (e) {
