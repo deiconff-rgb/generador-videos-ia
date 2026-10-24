@@ -1,4 +1,5 @@
-// Lógica de la página "Crear": historias -> elegir -> guion completo 9:16.
+// Lógica de la página "Crear" (flujo completo):
+// tema -> 5 historias -> elegir -> guion (2+ min) -> imágenes + voces -> video 9:16
 (function () {
   "use strict";
 
@@ -18,18 +19,25 @@
     ["Ciencia ficción", "rocket"],
   ];
 
-  function mostrarBarra(si) {
-    $("barra").classList.toggle("hidden", !si);
-    document.body.classList.toggle("con-barra", !!si);
-  }
-
   let historias = [];
-  let ultimoGuion = null;
   let elegida = -1;
   let temaActual = "";
+  let ultimoGuion = null;
+  let ultimoId = null;
   let ocupado = false;
 
   // ---------- utilidades ----------
+  function mostrarBarra(si) {
+    $("barra").classList.toggle("hidden", !si);
+    document.body.classList.toggle("con-barra", !!si);
+    if (window.ajustarEspacio) window.ajustarEspacio();
+  }
+
+  function nuevoAudio() {
+    try { return new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (_) { return null; }
+  }
+
   async function llamar(ruta, cuerpo) {
     const r = await fetch(ruta, {
       method: "POST",
@@ -62,11 +70,17 @@
 
   function guardarGuion(g) {
     try {
+      const id = Date.now();
       const lista = JSON.parse(localStorage.getItem("vi_guiones") || "[]");
-      lista.unshift(Object.assign({ id: Date.now(), fecha: new Date().toISOString(), tema: temaActual }, g));
+      lista.unshift(Object.assign({ id, fecha: new Date().toISOString(), tema: temaActual }, g));
       localStorage.setItem("vi_guiones", JSON.stringify(lista.slice(0, 20)));
-      return true;
-    } catch (_) { return false; }
+      return id;
+    } catch (_) { return null; }
+  }
+
+  function bloquearBotones(si) {
+    $("btnVideo").disabled = si;
+    $("btnSoloGuion").disabled = si;
   }
 
   // ---------- chips ----------
@@ -189,7 +203,7 @@
     const aviso = g.corto
       ? `<div class="flex items-start gap-3 rounded-xl border border-yellow-500/40 bg-yellow-950/30 p-4 text-yellow-100 mb-4">
            <i data-lucide="triangle-alert" class="w-5 h-5 mt-0.5 shrink-0"></i>
-           <span>El guion quedó más corto de 2 minutos. Toca “Regenerar guion” para intentar uno más largo.</span></div>`
+           <span>El guion quedó más corto de 2 minutos${g.escenas_fallidas ? " (" + g.escenas_fallidas + " escena(s) no se pudieron escribir)" : ""}. Toca “Regenerar guion” para intentar uno más largo.</span></div>`
       : "";
 
     $("guion").innerHTML = `
@@ -201,59 +215,85 @@
       </div>
       <h2 class="text-2xl font-bold">${esc(g.titulo)}</h2>
       <div class="flex flex-wrap gap-2 my-3">
-        <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="smartphone" class="w-4 h-4"></i> ${esc(g.formato)} · ${esc(g.resolucion)}</span>
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="smartphone" class="w-4 h-4"></i> ${esc(g.formato)} · vertical</span>
         <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="clock" class="w-4 h-4"></i> ~${tiempo(g.duracion_estimada)} min</span>
         <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="film" class="w-4 h-4"></i> ${(g.escenas || []).length} escenas</span>
         <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="message-square-text" class="w-4 h-4"></i> ${g.palabras} palabras</span>
-        ${guardado ? '<span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="circle-check" class="w-4 h-4"></i> Guardado en Mis videos</span>' : ""}
+        ${guardado ? '<span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="circle-check" class="w-4 h-4"></i> Guion guardado en Mis videos</span>' : ""}
       </div>
+
+      <div id="panelVideo" class="mb-5">
+        <div class="rounded-2xl border border-purple-500/40 bg-purple-950/40 p-5">
+          <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="video" class="w-5 h-5 text-purple-400"></i> Generar el video</p>
+          <p class="text-sm mt-1 text-purple-300">La IA crea una imagen vertical por escena y la voz de cada diálogo, y tu navegador arma el video 9:16 con subtítulos. Mantén la pantalla abierta y encendida mientras se graba.</p>
+          <button id="btnGenerarVideo" class="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 px-6 py-3 font-semibold text-white brillo">
+            <i data-lucide="clapperboard" class="w-5 h-5"></i> Generar video 9:16</button>
+        </div>
+      </div>
+
       ${aviso}
-      <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,24rem),1fr))]">${escenas}</div>
-      <div class="mt-6 rounded-2xl border border-purple-500/40 bg-purple-950/40 p-5">
-        <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="video" class="w-5 h-5 text-purple-400"></i> Generar el video</p>
-        <p class="text-sm mt-1 text-purple-300">La IA creará una imagen vertical por escena y la voz de cada diálogo, y tu navegador armará el video 9:16 con subtítulos. Mantén esta pantalla abierta y encendida mientras se graba (dura lo mismo que el video).</p>
-        <button id="btnGenerarVideo" class="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 px-6 py-3 font-semibold text-white brillo">
-          <i data-lucide="clapperboard" class="w-5 h-5"></i> Generar video 9:16</button>
-        <div id="panelVideo" class="mt-5"></div>
-      </div>`;
+      <h3 class="flex items-center gap-2 font-semibold text-lg mb-3"><i data-lucide="file-text" class="w-5 h-5 text-purple-400"></i> Guion completo</h3>
+      <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,24rem),1fr))]">${escenas}</div>`;
     iconos();
   }
 
-  async function crearGuion() {
+  // Paso 1 del flujo: pide el guion y lo muestra. Devuelve true si salió bien.
+  async function obtenerGuion() {
+    const h = historias[elegida];
+    const g = await llamar("/api/guion", { tema: temaActual, historia: h });
+    g.personajes = h.personajes || [];
+    g.estilo_visual = h.estilo_visual || "";
+    ultimoGuion = g;
+    ultimoId = guardarGuion(g);
+    estado();
+    $("resultados").classList.add("hidden");
+    mostrarBarra(false);
+    $("guion").classList.remove("hidden");
+    pintarGuion(g, !!ultimoId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return g;
+  }
+
+  // Botón principal: guion + imágenes + voces + video, todo seguido.
+  // Botón "Solo guion": se detiene después del guion.
+  function videoEnCurso() {
+    return !!(window.GeneradorVideo && window.GeneradorVideo.ocupado());
+  }
+
+  async function crearTodo(soloGuion) {
     if (elegida < 0 || ocupado) return;
+    if (videoEnCurso()) { estado("error", "Espera a que termine el video que se está creando."); return; }
+    // El AudioContext se crea dentro del toque del usuario para que el navegador lo permita.
+    const audio = soloGuion ? null : nuevoAudio();
     ocupado = true;
-    $("btnVideo").disabled = true;
-    estado("cargando", "Escribiendo el guion completo (8 escenas, mínimo 2 minutos)... puede tardar hasta un minuto.");
+    bloquearBotones(true);
+    estado("cargando", "Paso 1: escribiendo el guion completo (8 escenas, 2 minutos o más)... puede tardar hasta un minuto.");
+    let g = null;
     try {
-      const h = historias[elegida];
-      const g = await llamar("/api/guion", { tema: temaActual, historia: h });
-      g.personajes = h.personajes || [];
-      g.estilo_visual = h.estilo_visual || "";
-      ultimoGuion = g;
-      const guardado = guardarGuion(g);
-      estado();
-      $("resultados").classList.add("hidden");
-      mostrarBarra(false);
-      $("guion").classList.remove("hidden");
-      pintarGuion(g, guardado);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      g = await obtenerGuion();
     } catch (e) {
       estado("error", "No se pudo generar el guion: " + e.message);
+      if (audio) { try { audio.close(); } catch (_) {} }
     }
     ocupado = false;
-    $("btnVideo").disabled = false;
+    bloquearBotones(false);
+    if (g && !soloGuion && window.GeneradorVideo) {
+      window.GeneradorVideo.generar(g, $("panelVideo"), { audio, id: ultimoId });
+    }
   }
 
   function volver() {
+    if (videoEnCurso()) { estado("error", "Espera a que termine el video que se está creando."); return; }
     $("guion").classList.add("hidden");
     $("resultados").classList.remove("hidden");
-    mostrarBarra(true);
+    mostrarBarra(elegida >= 0);
     estado();
   }
 
   // ---------- eventos ----------
   $("btnGenerar").addEventListener("click", generar);
-  $("btnVideo").addEventListener("click", crearGuion);
+  $("btnVideo").addEventListener("click", () => crearTodo(false));
+  $("btnSoloGuion").addEventListener("click", () => crearTodo(true));
   $("tema").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); generar(); }
   });
@@ -269,10 +309,10 @@
   });
   $("guion").addEventListener("click", (e) => {
     if (e.target.closest("#btnVolver")) volver();
-    if (e.target.closest("#btnRegenerar")) crearGuion();
+    if (e.target.closest("#btnRegenerar")) crearTodo(true);
     if (e.target.closest("#btnGenerarVideo")) {
       if (!window.GeneradorVideo) { estado("error", "No se cargó el generador de video. Recarga la página."); return; }
-      if (ultimoGuion) window.GeneradorVideo.generar(ultimoGuion, $("panelVideo"));
+      if (ultimoGuion) window.GeneradorVideo.generar(ultimoGuion, $("panelVideo"), { audio: nuevoAudio(), id: ultimoId });
     }
   });
 

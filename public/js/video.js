@@ -61,9 +61,12 @@
   }
 
   // ---------- panel de progreso ----------
+  const PASOS = ["Guion", "Imágenes y voces", "Grabación", "Listo"];
+
   function panelProgreso(panel) {
     panel.innerHTML = `
       <div class="rounded-xl border border-purple-500/30 bg-[#140a24] p-4">
+        <div id="vPasos" class="flex flex-wrap gap-2 mb-3"></div>
         <p class="flex items-center gap-2 text-purple-100">
           <i data-lucide="loader-circle" class="w-5 h-5 animate-spin text-purple-400 shrink-0"></i>
           <span id="vTexto">Preparando...</span></p>
@@ -73,7 +76,19 @@
         <p id="vDetalle" class="mt-2 text-xs text-purple-300"></p>
       </div>`;
     iconos();
+
+    function pintarPasos(activo) {
+      panel.querySelector("#vPasos").innerHTML = PASOS.map((p, i) => {
+        const clase = i < activo ? "bg-purple-500/30 text-purple-100"
+          : i === activo ? "bg-purple-500 text-white"
+          : "border border-purple-500/30 text-purple-400";
+        return `<span class="rounded-full px-3 py-1 text-xs font-medium ${clase}">${i < activo ? "✓ " : (i + 1) + ". "}${p}</span>`;
+      }).join("");
+    }
+    pintarPasos(1);
+
     return {
+      paso: pintarPasos,
       set(texto, pct, detalle) {
         const t = panel.querySelector("#vTexto");
         const b = panel.querySelector("#vBarra");
@@ -91,7 +106,7 @@
     iconos();
   }
 
-  function panelListo(panel, url, mime, titulo, segundos) {
+  function panelListo(panel, url, mime, titulo, segundos, guardado, rehacer) {
     const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
     const nombre = (titulo || "video").toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, "-").replace(/^-+|-+$/g, "") + "." + ext;
     panel.innerHTML = `
@@ -101,16 +116,21 @@
         <div class="space-y-3">
           <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="circle-check" class="w-5 h-5 text-purple-400"></i> ¡Tu video está listo!</p>
           <p class="text-sm text-purple-300">${W}×${H} (9:16) · ~${Math.round(segundos)} s · formato ${esc(ext.toUpperCase())}</p>
+          ${guardado ? '<p class="flex items-center gap-1.5 text-sm text-purple-200"><i data-lucide="circle-check" class="w-4 h-4 text-purple-400"></i> Guardado en Mis videos</p>' : ""}
           <div class="flex flex-wrap gap-3">
             <a href="${url}" download="${esc(nombre)}" class="flex items-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 px-5 py-2.5 font-semibold text-white brillo">
               <i data-lucide="download" class="w-4 h-4"></i> Descargar</a>
             <button id="vCompartir" class="flex items-center gap-2 rounded-xl border border-purple-400/50 px-5 py-2.5 text-purple-100 hover:bg-purple-500/20">
               <i data-lucide="share-2" class="w-4 h-4"></i> Compartir</button>
+            <button id="vRehacer" class="flex items-center gap-2 rounded-xl border border-purple-400/50 px-5 py-2.5 text-purple-100 hover:bg-purple-500/20">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i> Hacer otra versión</button>
           </div>
           ${ext === "webm" ? '<p class="text-xs text-purple-300">Tu navegador grabó en WebM. YouTube y TikTok lo aceptan; si alguna red lo rechaza, habrá que convertirlo a MP4 en la fase de publicación.</p>' : ""}
         </div>
       </div>`;
     iconos();
+    const otra = panel.querySelector("#vRehacer");
+    if (otra && rehacer) otra.addEventListener("click", rehacer);
     const btn = panel.querySelector("#vCompartir");
     btn.addEventListener("click", async () => {
       try {
@@ -247,7 +267,8 @@
   }
 
   // ---------- proceso principal ----------
-  async function generar(g, panel) {
+  async function generar(g, panel, opts) {
+    opts = opts || {};
     if (enCurso) return;
     if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
       panelError(panel, "Este navegador no puede grabar video. Prueba con Chrome o Brave actualizado.");
@@ -256,7 +277,7 @@
     enCurso = true;
 
     // El AudioContext se crea de inmediato (dentro del toque del usuario) para que el navegador lo permita.
-    const audio = new (window.AudioContext || window.webkitAudioContext)();
+    const audio = opts.audio || new (window.AudioContext || window.webkitAudioContext)();
     const ui = panelProgreso(panel);
     let wake = null;
     try { if (navigator.wakeLock) wake = await navigator.wakeLock.request("screen"); } catch (_) {}
@@ -277,6 +298,7 @@
       let fallosImg = 0, fallosVoz = 0, ultimoErrorVoz = "";
       const avance = (texto) => { hechos++; ui.set(texto, (hechos / total) * 70, hechos + " de " + total + " elementos listos"); };
 
+      ui.paso(1);
       ui.set("Creando imágenes y voces...", 0, "0 de " + total + " elementos listos");
 
       // imágenes (2 a la vez) y voces (3 a la vez)
@@ -350,6 +372,7 @@
         src.start(t0 + l.ini);
       });
 
+      ui.paso(2);
       dibujarFrame(ctx, estado, 0);
       rec.start(1000);
 
@@ -372,7 +395,15 @@
       const tipo = rec.mimeType || mime || "video/webm";
       const blob = new Blob(trozos, { type: tipo });
       const url = URL.createObjectURL(blob);
-      panelListo(panel, url, tipo, g.titulo, totalSeg);
+      let guardado = false;
+      if (opts.id && window.Almacen) {
+        try { await window.Almacen.guardarVideo(opts.id, blob, tipo); guardado = true; } catch (_) {}
+      }
+      const rehacer = () => {
+        const nuevoAudio = new (window.AudioContext || window.webkitAudioContext)();
+        generar(g, panel, { audio: nuevoAudio, id: opts.id });
+      };
+      panelListo(panel, url, tipo, g.titulo, totalSeg, guardado, rehacer);
 
       const avisos = [];
       if (fallosImg) avisos.push(fallosImg + " imagen(es) no se pudieron crear y se usó un fondo morado");
@@ -390,5 +421,5 @@
     enCurso = false;
   }
 
-  window.GeneradorVideo = { generar };
+  window.GeneradorVideo = { generar, ocupado: () => enCurso };
 })();

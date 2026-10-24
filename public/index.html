@@ -55,10 +55,16 @@
       <i data-lucide="circle-check" class="w-5 h-5 text-purple-400 shrink-0"></i>
       <span class="truncate">Elegida: <span id="tituloElegida" class="font-semibold text-purple-100"></span></span>
     </p>
-    <button id="btnVideo"
-      class="sm:w-auto w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 font-semibold px-6 py-3 text-white brillo disabled:opacity-60">
-      <i data-lucide="video" class="w-5 h-5"></i> Crear video con esta historia
-    </button>
+    <div class="flex gap-2 sm:w-auto">
+      <button id="btnSoloGuion"
+        class="flex items-center justify-center gap-2 rounded-xl border border-purple-400/60 px-4 py-3 text-purple-100 hover:bg-purple-500/20 disabled:opacity-60">
+        <i data-lucide="file-text" class="w-5 h-5"></i> <span class="hidden sm:inline">Solo guion</span><span class="sm:hidden">Guion</span>
+      </button>
+      <button id="btnVideo"
+        class="flex-1 sm:flex-none flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 font-semibold px-6 py-3 text-white brillo disabled:opacity-60">
+        <i data-lucide="video" class="w-5 h-5"></i> Crear video completo
+      </button>
+    </div>
   </div>
 </div>
 
@@ -66,6 +72,7 @@
 
 <script src="/js/componentes/app-header.js"></script>
 <script src="/js/componentes/app-footer.js"></script>
+<script src="/js/almacen.js"></script>
 <script src="/js/video.js"></script>
 <script src="/js/crear.js"></script>
 <script src="/js/comun.js"></script>
