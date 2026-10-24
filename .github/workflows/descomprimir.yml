@@ -1,0 +1,43 @@
+name: Descomprimir ZIP
+
+# Sube un archivo .zip a la raíz del repo y este flujo lo descomprime,
+# guarda los archivos con sus carpetas y borra el .zip.
+on:
+  push:
+    paths:
+      - "*.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  descomprimir:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Descomprimir
+        run: |
+          shopt -s nullglob
+          zips=(*.zip)
+          if [ ${#zips[@]} -eq 0 ]; then
+            echo "No hay archivos zip"
+            exit 0
+          fi
+          for z in "${zips[@]}"; do
+            unzip -o "$z"
+            rm "$z"
+          done
+
+      - name: Guardar cambios
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Sin cambios"
+            exit 0
+          fi
+          git commit -m "Actualizar archivos desde ZIP"
+          git push
