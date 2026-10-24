@@ -60,7 +60,8 @@
 
             ${tiene ? `<button data-id="${esc(g.id)}" class="ver-video mt-2 flex items-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 px-4 py-2 text-sm font-semibold text-white">
               <i data-lucide="play" class="w-4 h-4"></i> Ver video</button>
-              <div id="vv-${esc(g.id)}" class="mt-3"></div>` : ""}
+              <div id="vv-${esc(g.id)}" class="mt-3"></div>
+              <div id="pp-${esc(g.id)}" class="mt-3"></div>` : ""}
 
             <details class="mt-2">
               <summary class="cursor-pointer text-sm text-purple-300 select-none">Ver guion</summary>
@@ -98,6 +99,13 @@
           <a href="${url}" download="video-${esc(id)}.${ext}" class="mt-2 inline-flex items-center gap-2 rounded-xl border border-purple-400/50 px-4 py-2 text-sm text-purple-100 hover:bg-purple-500/20">
             <i data-lucide="download" class="w-4 h-4"></i> Descargar</a>`;
         if (window.lucide) lucide.createIcons();
+        const g = leer().find((x) => String(x.id) === id) || {};
+        if (window.Publicar) {
+          window.Publicar.montar(document.getElementById("pp-" + id), {
+            blob: reg.blob, mime: reg.mime, nombre: "video-" + id + "." + ext,
+            titulo: g.titulo, descripcion: g.sinopsis, tema: g.tema,
+          });
+        }
       } catch (_) { cont.textContent = "No se pudo abrir el video."; }
     }
   });

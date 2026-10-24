@@ -1,6 +1,6 @@
 // Generador de video 9:16 dentro del navegador (sin servidor de video).
-// Flujo: imagen por escena (/api/imagen) + voz por diálogo (/api/voz)
-//        -> se dibuja en un canvas con subtítulos -> MediaRecorder lo graba.
+// Flujo: una imagen por "toma" (según la acción del guion) + voz por diálogo
+//        -> se dibuja en un canvas con movimiento de cámara y subtítulos -> MediaRecorder lo graba.
 (function () {
   "use strict";
 
@@ -8,6 +8,7 @@
   const H = 1280;
   const FPS = 30;
   const PAUSA = 0.35;     // segundos entre diálogos
+  const FADE = 0.5;       // segundos de transición entre tomas
   const PALABRAS_POR_SEG = 2.5;
 
   const esc = (s) =>
@@ -18,6 +19,16 @@
   const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
 
   let enCurso = false;
+
+  // Movimientos de cámara (zoom y paneo). x e y van de -1 a 1.
+  const MOVS = [
+    { z0: 1.0,  z1: 1.30, x0: 0,    x1: 0,   y0: 0,    y1: 0 },    // acercar
+    { z0: 1.25, z1: 1.25, x0: -1,   x1: 1,   y0: 0,    y1: 0 },    // paneo a la derecha
+    { z0: 1.30, z1: 1.0,  x0: 0,    x1: 0,   y0: 0,    y1: 0 },    // alejar
+    { z0: 1.25, z1: 1.25, x0: 1,    x1: -1,  y0: 0,    y1: 0 },    // paneo a la izquierda
+    { z0: 1.25, z1: 1.25, x0: 0,    x1: 0,   y0: 1,    y1: -1 },   // inclinar hacia arriba
+    { z0: 1.0,  z1: 1.30, x0: -0.6, x1: 0.6, y0: -0.6, y1: 0.6 },  // acercar en diagonal
+  ];
 
   // ---------- red ----------
   async function post(ruta, cuerpo) {
@@ -40,13 +51,39 @@
     return u8.buffer;
   }
 
-  function cargarImagen(b64) {
+  function cargarImagenBlob(blob) {
     return new Promise((ok, mal) => {
+      const url = URL.createObjectURL(blob);
       const im = new Image();
-      im.onload = () => ok(im);
-      im.onerror = () => mal(new Error("Imagen inválida"));
-      im.src = "data:image/jpeg;base64," + b64;
+      im.onload = () => { try { URL.revokeObjectURL(url); } catch (_) {} ok(im); };
+      im.onerror = () => { try { URL.revokeObjectURL(url); } catch (_) {} mal(new Error("Imagen inválida")); };
+      im.src = url;
     });
+  }
+
+  // La imagen llega como archivo (no como texto). Reintenta hasta 3 veces.
+  async function pedirImagen(prompt) {
+    let ultimo = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await fetch("/api/imagen", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        const tipo = r.headers.get("Content-Type") || "";
+        if (!r.ok || tipo.indexOf("image/") !== 0) {
+          let msg = "HTTP " + r.status;
+          try { msg = (await r.json()).error || msg; } catch (_) {}
+          throw new Error(msg);
+        }
+        return await cargarImagenBlob(await r.blob());
+      } catch (e) {
+        ultimo = e;
+        if (i < 2) await esperar(1500 * (i + 1));
+      }
+    }
+    throw ultimo;
   }
 
   async function enParalelo(tareas, limite) {
@@ -106,43 +143,35 @@
     iconos();
   }
 
-  function panelListo(panel, url, mime, titulo, segundos, guardado, rehacer) {
+  function panelListo(panel, url, mime, titulo, segundos, guardado, rehacer, extra) {
     const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
     const nombre = (titulo || "video").toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, "-").replace(/^-+|-+$/g, "") + "." + ext;
     panel.innerHTML = `
       <div class="grid gap-5 lg:grid-cols-[auto_1fr] items-start">
         <video src="${url}" controls playsinline class="mx-auto rounded-2xl border border-purple-500/40 bg-black brillo"
                style="aspect-ratio:9/16; max-height:75vh; width:auto; max-width:100%"></video>
-        <div class="space-y-3">
+        <div class="space-y-3 min-w-0">
           <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="circle-check" class="w-5 h-5 text-purple-400"></i> ¡Tu video está listo!</p>
           <p class="text-sm text-purple-300">${W}×${H} (9:16) · ~${Math.round(segundos)} s · formato ${esc(ext.toUpperCase())}</p>
           ${guardado ? '<p class="flex items-center gap-1.5 text-sm text-purple-200"><i data-lucide="circle-check" class="w-4 h-4 text-purple-400"></i> Guardado en Mis videos</p>' : ""}
           <div class="flex flex-wrap gap-3">
             <a href="${url}" download="${esc(nombre)}" class="flex items-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 px-5 py-2.5 font-semibold text-white brillo">
               <i data-lucide="download" class="w-4 h-4"></i> Descargar</a>
-            <button id="vCompartir" class="flex items-center gap-2 rounded-xl border border-purple-400/50 px-5 py-2.5 text-purple-100 hover:bg-purple-500/20">
-              <i data-lucide="share-2" class="w-4 h-4"></i> Compartir</button>
             <button id="vRehacer" class="flex items-center gap-2 rounded-xl border border-purple-400/50 px-5 py-2.5 text-purple-100 hover:bg-purple-500/20">
               <i data-lucide="refresh-cw" class="w-4 h-4"></i> Hacer otra versión</button>
           </div>
-          ${ext === "webm" ? '<p class="text-xs text-purple-300">Tu navegador grabó en WebM. YouTube y TikTok lo aceptan; si alguna red lo rechaza, habrá que convertirlo a MP4 en la fase de publicación.</p>' : ""}
+          <div id="vPublicar"></div>
+          ${ext === "webm" ? '<p class="text-xs text-purple-300">Tu navegador grabó en WebM. Si alguna app no lo acepta, vuelve a generarlo desde Chrome o Brave actualizado para obtener MP4.</p>' : ""}
         </div>
       </div>`;
     iconos();
     const otra = panel.querySelector("#vRehacer");
     if (otra && rehacer) otra.addEventListener("click", rehacer);
-    const btn = panel.querySelector("#vCompartir");
-    btn.addEventListener("click", async () => {
-      try {
-        const blob = await (await fetch(url)).blob();
-        const archivo = new File([blob], nombre, { type: mime });
-        if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
-          await navigator.share({ files: [archivo], title: titulo });
-        } else {
-          btn.textContent = "Tu navegador no permite compartir archivos; usa Descargar";
-        }
-      } catch (_) { /* el usuario canceló */ }
-    });
+    if (window.Publicar && extra && extra.blob) {
+      window.Publicar.montar(panel.querySelector("#vPublicar"), {
+        blob: extra.blob, mime, nombre, titulo, descripcion: extra.descripcion, tema: extra.tema,
+      });
+    }
   }
 
   // ---------- voces: velocidad distinta por personaje ----------
@@ -159,6 +188,7 @@
   }
 
   // ---------- dibujo ----------
+  // Para imágenes cuadradas (respaldo FLUX): fondo desenfocado de la misma imagen.
   function fondoDesenfocado(img) {
     const c = document.createElement("canvas");
     c.width = W; c.height = H;
@@ -172,6 +202,8 @@
     x.fillRect(0, 0, W, H);
     return c;
   }
+
+  function esVertical(img) { return img.width / img.height < 0.8; }
 
   function envolver(ctx, texto, ancho) {
     const palabras = String(texto).split(/\s+/);
@@ -195,27 +227,56 @@
     ctx.fillText(texto, x, y);
   }
 
-  function dibujarFrame(ctx, estado, t) {
-    const { escenas, imagenes, fondos, lineas, titulo, total } = estado;
-
-    // escena activa
-    let si = escenas.length - 1;
-    for (let i = 0; i < escenas.length; i++) { if (t < escenas[i].fin) { si = i; break; } }
-    const esc_ = escenas[si];
-    const prog = Math.max(0, Math.min(1, (t - esc_.ini) / Math.max(0.1, esc_.fin - esc_.ini)));
-
-    // fondo
-    if (imagenes[si]) {
-      ctx.drawImage(fondos[si], 0, 0, W, H);
-      const zoom = 1 + 0.12 * prog;               // Ken Burns lento
-      const lado = W * zoom;
-      ctx.drawImage(imagenes[si], (W - lado) / 2, (H - lado) / 2 - 90, lado, lado);
-    } else {
+  // Dibuja una toma con su movimiento de cámara. p va de 0 a 1.
+  function dibujarToma(ctx, toma, p) {
+    if (!toma.img) {
       const g = ctx.createLinearGradient(0, 0, 0, H);
       g.addColorStop(0, "#3b0a6b"); g.addColorStop(1, "#0b0613");
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       ctx.textAlign = "center"; ctx.font = "bold 140px sans-serif";
-      textoConBorde(ctx, String(si + 1), W / 2, H / 2 - 40, "#c084fc");
+      textoConBorde(ctx, String(toma.si + 1), W / 2, H / 2 - 40, "#c084fc");
+      return;
+    }
+    const img = toma.img;
+    const mov = toma.mov;
+    const e = p * p * (3 - 2 * p);                 // arranque y frenado suaves
+    const vertical = esVertical(img);
+
+    let bw, bh;
+    if (vertical) {
+      const k = Math.max(W / img.width, H / img.height);
+      bw = img.width * k; bh = img.height * k;     // cubre todo el cuadro
+    } else {
+      if (toma.fondo) ctx.drawImage(toma.fondo, 0, 0, W, H);
+      bw = W; bh = (W * img.height) / img.width;
+    }
+    const z = mov.z0 + (mov.z1 - mov.z0) * e;
+    const w = bw * z, h = bh * z;
+    const px = mov.x0 + (mov.x1 - mov.x0) * e;
+    const py = mov.y0 + (mov.y1 - mov.y0) * e;
+    const left = (W - w) / 2 + (px * Math.max(0, w - W)) / 2;
+    const top = vertical ? (H - h) / 2 + (py * Math.max(0, h - H)) / 2 : (H - h) / 2 - 90;
+    ctx.drawImage(img, left, top, w, h);
+  }
+
+  function dibujarFrame(ctx, estado, t) {
+    const { tomas, lineas, titulo, total } = estado;
+
+    // toma activa
+    let k = tomas.length - 1;
+    for (let i = 0; i < tomas.length; i++) { if (t < tomas[i].fin) { k = i; break; } }
+    const tk = tomas[k];
+    const p = Math.max(0, Math.min(1, (t - tk.ini) / Math.max(0.1, tk.fin - tk.ini)));
+
+    ctx.fillStyle = "#0b0613";
+    ctx.fillRect(0, 0, W, H);
+    if (k > 0 && t - tk.ini < FADE) {              // transición suave entre tomas
+      dibujarToma(ctx, tomas[k - 1], 1);
+      ctx.globalAlpha = Math.max(0, Math.min(1, (t - tk.ini) / FADE));
+      dibujarToma(ctx, tk, p);
+      ctx.globalAlpha = 1;
+    } else {
+      dibujarToma(ctx, tk, p);
     }
 
     // degradado inferior para los subtítulos
@@ -269,11 +330,11 @@
   // ---------- proceso principal ----------
   async function generar(g, panel, opts) {
     opts = opts || {};
-    if (enCurso) return;
     if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) {
       panelError(panel, "Este navegador no puede grabar video. Prueba con Chrome o Brave actualizado.");
       return;
     }
+    if (enCurso) return;
     enCurso = true;
 
     // El AudioContext se crea de inmediato (dentro del toque del usuario) para que el navegador lo permita.
@@ -286,29 +347,38 @@
       const escenasG = g.escenas || [];
       const velo = velocidades(g.personajes);
 
-      // lista de diálogos
+      // diálogos
       const items = [];
       escenasG.forEach((e, si) => (e.dialogos || []).forEach((d) =>
         items.push({ si, personaje: d.personaje, texto: String(d.texto || ""), buffer: null })));
 
-      const imagenes = new Array(escenasG.length).fill(null);
-      const fondos = new Array(escenasG.length).fill(null);
-      const total = escenasG.length + items.length;
+      // tomas: cada una es una imagen que sigue la acción de esa parte de la escena
+      const tomas = [];
+      escenasG.forEach((e, si) => {
+        const lista = e.tomas && e.tomas.length
+          ? e.tomas
+          : [{ prompt: e.prompt_imagen || e.escenografia || g.titulo }];
+        lista.forEach((t) => tomas.push({
+          si, prompt: t.prompt || t.imagen || e.escenografia || g.titulo,
+          img: null, fondo: null, mov: null, ini: 0, fin: 0,
+        }));
+      });
+
+      const total = tomas.length + items.length;
       let hechos = 0;
-      let fallosImg = 0, fallosVoz = 0, ultimoErrorVoz = "";
+      let fallosVoz = 0, ultimoErrorVoz = "";
+      const erroresImg = [];
       const avance = (texto) => { hechos++; ui.set(texto, (hechos / total) * 70, hechos + " de " + total + " elementos listos"); };
 
       ui.paso(1);
       ui.set("Creando imágenes y voces...", 0, "0 de " + total + " elementos listos");
 
-      // imágenes (2 a la vez) y voces (3 a la vez)
-      const tareasImg = escenasG.map((e, i) => async () => {
+      const tareasImg = tomas.map((tm, i) => async () => {
         try {
-          const r = await post("/api/imagen", { prompt: e.prompt_imagen || e.escenografia || g.titulo });
-          imagenes[i] = await cargarImagen(r.image);
-          fondos[i] = fondoDesenfocado(imagenes[i]);
-        } catch (_) { fallosImg++; }
-        avance("Creando imágenes... (escena " + (i + 1) + ")");
+          tm.img = await pedirImagen(tm.prompt);
+          if (!esVertical(tm.img)) tm.fondo = fondoDesenfocado(tm.img);
+        } catch (e) { erroresImg.push(e.message); }
+        avance("Creando imágenes según la acción... (" + (i + 1) + " de " + tomas.length + ")");
       });
       const tareasVoz = items.map((it) => async () => {
         try {
@@ -323,30 +393,47 @@
         throw new Error("No se pudo crear ninguna voz. Último error: " + ultimoErrorVoz);
       }
 
+      // Si una imagen falló, se reutiliza la toma más cercana (se mueve distinto) en vez de dejar fondo vacío.
+      const fallidas = tomas.filter((x) => !x.img).length;
+      tomas.forEach((x, i) => {
+        if (x.img) return;
+        for (let d = 1; d < tomas.length; d++) {
+          const c = tomas[i - d] && tomas[i - d].img ? tomas[i - d] : (tomas[i + d] && tomas[i + d].img ? tomas[i + d] : null);
+          if (c) { x.img = c.img; x.fondo = c.fondo; break; }
+        }
+      });
+      tomas.forEach((x, i) => { x.mov = MOVS[i % MOVS.length]; });
+
       // línea de tiempo
       let t = 0.6;
-      const escenas = [];
       const lineas = [];
       escenasG.forEach((e, si) => {
-        const ini = si === 0 ? 0 : t;
-        items.filter((it) => it.si === si).forEach((it) => {
+        const iniEscena = si === 0 ? 0 : t;
+        const its = items.filter((it) => it.si === si);
+        const inicios = [];
+        its.forEach((it) => {
           const rate = velo[it.personaje] || 1;
           const palabras = it.texto.trim().split(/\s+/).filter(Boolean).length;
           const dur = it.buffer ? it.buffer.duration / rate : Math.max(2, palabras / PALABRAS_POR_SEG);
+          inicios.push(t);
           lineas.push({ ini: t, fin: t + dur, personaje: it.personaje, texto: it.texto, buffer: it.buffer, rate });
           t += dur + PAUSA;
         });
-        if (t - ini < 2) t = ini + 2;
-        escenas.push({ ini, fin: t });
+        if (t - iniEscena < 2) t = iniEscena + 2;
+        const mias = tomas.filter((x) => x.si === si);
+        mias.forEach((x, j) => {
+          const k = its.length ? Math.floor((j * its.length) / mias.length) : 0;
+          x.ini = j === 0 ? iniEscena : (its.length ? inicios[k] : iniEscena + ((t - iniEscena) * j) / mias.length);
+        });
       });
       const totalSeg = t + 0.8;
-      escenas[escenas.length - 1].fin = totalSeg;
+      tomas.forEach((x, i) => { x.fin = i + 1 < tomas.length ? tomas[i + 1].ini : totalSeg; });
 
       // canvas + grabadora
       const canvas = document.createElement("canvas");
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext("2d");
-      const estado = { escenas, imagenes, fondos, lineas, titulo: g.titulo || "", total: totalSeg };
+      const estado = { tomas, lineas, titulo: g.titulo || "", total: totalSeg };
 
       const destino = audio.createMediaStreamDestination();
       const flujo = canvas.captureStream(FPS);
@@ -403,14 +490,18 @@
         const nuevoAudio = new (window.AudioContext || window.webkitAudioContext)();
         generar(g, panel, { audio: nuevoAudio, id: opts.id });
       };
-      panelListo(panel, url, tipo, g.titulo, totalSeg, guardado, rehacer);
+      panelListo(panel, url, tipo, g.titulo, totalSeg, guardado, rehacer,
+        { blob, descripcion: g.sinopsis || "", tema: g.tema || opts.tema || "" });
 
       const avisos = [];
-      if (fallosImg) avisos.push(fallosImg + " imagen(es) no se pudieron crear y se usó un fondo morado");
+      if (fallidas) {
+        const detalle = erroresImg.length ? " Motivo: " + erroresImg[0] : "";
+        avisos.push(fallidas + " de " + tomas.length + " imagen(es) no se pudieron crear y se reutilizó otra." + detalle);
+      }
       if (fallosVoz) avisos.push(fallosVoz + " voz/voces no se pudieron crear y esas líneas salen solo con subtítulo");
       if (avisos.length) {
         panel.insertAdjacentHTML("beforeend",
-          `<p class="mt-3 text-xs text-yellow-200">Aviso: ${esc(avisos.join("; "))}. Puedes volver a generar el video.</p>`);
+          `<p class="mt-3 text-xs text-yellow-200 break-words">Aviso: ${esc(avisos.join("; "))} Puedes volver a generar el video.</p>`);
       }
     } catch (e) {
       panelError(panel, "No se pudo generar el video: " + e.message);

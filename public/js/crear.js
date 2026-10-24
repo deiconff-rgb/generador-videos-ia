@@ -193,8 +193,9 @@
           <p class="flex items-start gap-2 text-sm text-purple-100/90"><i data-lucide="map-pin" class="w-4 h-4 mt-0.5 shrink-0 text-purple-300"></i><span>${esc(e.escenografia)}</span></p>
           <div class="space-y-1.5">${dialogos}</div>
           <details>
-            <summary class="cursor-pointer flex items-center gap-2 text-xs text-purple-300 select-none"><i data-lucide="images" class="w-4 h-4"></i> Prompt de imagen 9:16</summary>
-            <p class="mt-1 text-xs text-purple-200 break-words">${esc(e.prompt_imagen)}, vertical 9:16 composition</p>
+            <summary class="cursor-pointer flex items-center gap-2 text-xs text-purple-300 select-none"><i data-lucide="images" class="w-4 h-4"></i> Imágenes de esta escena (9:16)</summary>
+            ${(e.tomas && e.tomas.length ? e.tomas : [{ prompt: e.prompt_imagen }]).map((t, i) =>
+              `<p class="mt-1 text-xs text-purple-200 break-words"><span class="font-semibold">Toma ${i + 1}${t.desde != null ? " (diálogos " + (t.desde + 1) + "-" + t.hasta + ")" : ""}:</span> ${esc(t.prompt || t.imagen)}</p>`).join("")}
           </details>
         </div>
       </article>`;
@@ -214,6 +215,7 @@
           <i data-lucide="refresh-cw" class="w-4 h-4"></i> Regenerar guion</button>
       </div>
       <h2 class="text-2xl font-bold">${esc(g.titulo)}</h2>
+      <p class="mt-1 flex items-start gap-2 text-xs text-purple-300"><i data-lucide="info" class="w-4 h-4 shrink-0"></i> La IA puede equivocarse en nombres, fechas y datos reales. Revisa los hechos antes de publicar.</p>
       <div class="flex flex-wrap gap-2 my-3">
         <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="smartphone" class="w-4 h-4"></i> ${esc(g.formato)} · vertical</span>
         <span class="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm"><i data-lucide="clock" class="w-4 h-4"></i> ~${tiempo(g.duracion_estimada)} min</span>
@@ -225,7 +227,7 @@
       <div id="panelVideo" class="mb-5">
         <div class="rounded-2xl border border-purple-500/40 bg-purple-950/40 p-5">
           <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="video" class="w-5 h-5 text-purple-400"></i> Generar el video</p>
-          <p class="text-sm mt-1 text-purple-300">La IA crea una imagen vertical por escena y la voz de cada diálogo, y tu navegador arma el video 9:16 con subtítulos. Mantén la pantalla abierta y encendida mientras se graba.</p>
+          <p class="text-sm mt-1 text-purple-300">La IA crea imágenes verticales según la acción de cada escena y la voz de cada diálogo, y tu navegador arma el video 9:16 con movimiento de cámara y subtítulos. Mantén la pantalla abierta y encendida mientras se graba.</p>
           <button id="btnGenerarVideo" class="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-400 hover:to-fuchsia-400 px-6 py-3 font-semibold text-white brillo">
             <i data-lucide="clapperboard" class="w-5 h-5"></i> Generar video 9:16</button>
         </div>
@@ -243,6 +245,8 @@
     const g = await llamar("/api/guion", { tema: temaActual, historia: h });
     g.personajes = h.personajes || [];
     g.estilo_visual = h.estilo_visual || "";
+    g.sinopsis = h.sinopsis || "";
+    g.tema = temaActual;
     ultimoGuion = g;
     ultimoId = guardarGuion(g);
     estado();
