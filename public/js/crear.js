@@ -265,6 +265,7 @@
         <span class="${BADGE}"><i data-lucide="film" class="w-4 h-4"></i> ${(g.escenas || []).length} escenas</span>
         <span class="${BADGE}"><i data-lucide="images" class="w-4 h-4"></i> ${g.imagenes || ""} imágenes</span>
         <span class="${BADGE}"><i data-lucide="mic" class="w-4 h-4"></i> ${g.palabras} palabras</span>
+        ${g.obra ? `<span class="${BADGE}"><i data-lucide="star" class="w-4 h-4"></i> Obra: ${esc(g.obra)}</span>` : ""}
         ${guardado ? `<span class="${BADGE}"><i data-lucide="circle-check" class="w-4 h-4"></i> Guion guardado en Mis videos</span>` : ""}
       </div>
 

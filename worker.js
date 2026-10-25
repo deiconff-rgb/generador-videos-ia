@@ -60,36 +60,43 @@ const ESTILOS = {
   historia: {
     realista: true,
     narrador: "narrador de documental histórico: solemne, claro y apasionante, con datos reales",
+    corto: "photorealistic historical photograph, film grain",
     en: "photorealistic historical scene, realistic human faces and skin texture, authentic period clothing, architecture and props, natural cinematic lighting, vintage 35mm film photograph, muted warm earthy tones, highly detailed",
   },
   anime: {
     realista: false,
     narrador: "narrador de una serie de anime: épico, emotivo y lleno de energía",
+    corto: "anime screenshot, 2D cel shaded, vibrant colors",
     en: "high quality anime illustration, clean line art, vibrant colors, cel shading, expressive anime characters, dramatic cinematic lighting, detailed background",
   },
   comedia: {
     realista: false,
     narrador: "narrador cómico, con ironía y humor ligero, como quien cuenta una anécdota muy divertida",
+    corto: "funny 2D cartoon, bold outlines, bright colors",
     en: "colorful 2D cartoon illustration, funny exaggerated expressions, bold outlines, bright playful colors, humorous scene",
   },
   terror: {
     realista: true,
     narrador: "narrador de historias de terror: voz baja y tensa, con pausas y detalles inquietantes",
+    corto: "dark horror photograph, thick fog, deep shadows",
     en: "dark horror cinematic photograph, photorealistic, realistic human faces, low-key lighting, deep shadows, thick fog, desaturated cold colors, unsettling eerie atmosphere, film grain",
   },
   misterio: {
     realista: true,
     narrador: "narrador de misterio: intrigante, que plantea preguntas y dosifica la información",
+    corto: "film noir photograph, dramatic shadows, rain",
     en: "moody film noir cinematic photograph, photorealistic, realistic human faces, dramatic shadows, rain, muted colors, mysterious atmosphere",
   },
   scifi: {
     realista: true,
     narrador: "narrador de ciencia ficción: asombrado, preciso y visionario",
+    corto: "futuristic cinematic photograph, neon lighting",
     en: "photorealistic futuristic cinematic scene, realistic human faces, neon and volumetric lighting, highly detailed",
   },
   general: {
     realista: true,
     narrador: "cuentacuentos: cálido, cercano y con buen ritmo",
+    corto: "photorealistic cinematic photograph, natural light",
     en: "photorealistic cinematic photograph, realistic human faces and skin texture, natural lighting, shallow depth of field, highly detailed",
   },
 };
@@ -110,6 +117,87 @@ function detectarGenero(texto) {
 
 function estiloDe(genero) {
   return ESTILOS[genero] || ESTILOS.general;
+}
+
+
+// ---------- Obras conocidas (para que las imágenes dibujen a los personajes reales) ----------
+const FRANQUICIAS = [
+  ["naruto", "Naruto"], ["dragon ball", "Dragon Ball"], ["one piece", "One Piece"], ["bleach", "Bleach"],
+  ["attack on titan", "Attack on Titan"], ["shingeki", "Attack on Titan"], ["ataque a los titanes", "Attack on Titan"],
+  ["demon slayer", "Demon Slayer"], ["kimetsu", "Demon Slayer"], ["jujutsu", "Jujutsu Kaisen"],
+  ["my hero academia", "My Hero Academia"], ["boku no hero", "My Hero Academia"], ["pokemon", "Pokémon"],
+  ["sailor moon", "Sailor Moon"], ["death note", "Death Note"], ["fullmetal", "Fullmetal Alchemist"],
+  ["hunter x hunter", "Hunter x Hunter"], ["fairy tail", "Fairy Tail"], ["tokyo ghoul", "Tokyo Ghoul"],
+  ["one punch", "One Punch Man"], ["chainsaw man", "Chainsaw Man"], ["spy x family", "Spy x Family"],
+  ["evangelion", "Neon Genesis Evangelion"], ["cowboy bebop", "Cowboy Bebop"], ["haikyuu", "Haikyu!!"],
+  ["black clover", "Black Clover"], ["caballeros del zodiaco", "Saint Seiya"], ["saint seiya", "Saint Seiya"],
+  ["digimon", "Digimon"], ["inuyasha", "Inuyasha"], ["jojo", "JoJo's Bizarre Adventure"],
+];
+
+function normalizarTexto(t) {
+  return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function obraDesdeTema(tema, genero) {
+  const n = normalizarTexto(tema);
+  for (const [clave, nombre] of FRANQUICIAS) if (n.includes(clave)) return nombre;
+  if (genero !== "anime") return "";
+  // palabras con mayúscula inicial que no sean palabras comunes ("Naruto", "Dragon Ball")
+  const comunes = new Set(["un", "una", "video", "videos", "sobre", "de", "del", "la", "el", "los", "las", "historia",
+    "anime", "que", "hable", "quiero", "crea", "crear", "haz", "hacer", "japon", "japones", "manga"]);
+  const tokens = String(tema).match(/[A-ZÁÉÍÓÚÑ][\wáéíóúñ-]+/g) || [];
+  const buenos = tokens.filter((t) => !comunes.has(normalizarTexto(t)));
+  return buenos.slice(0, 3).join(" ");
+}
+
+// ---------- Pronunciación: cómo debe sonar cada palabra extranjera en español ----------
+// El texto del subtítulo no cambia; solo lo que lee la voz.
+const PRON_BASE = {
+  hokage: "jokage", konoha: "konoja", hashirama: "jashirama", hiruzen: "jiruzen", hinata: "jinata",
+  hyuga: "jiuga", uchiha: "uchija", senju: "senyu", shinobi: "chinobi", shuriken: "churiken",
+  sharingan: "charingan", shippuden: "chipuden", jutsu: "yutsu", genin: "guenin", hachibi: "jachibi",
+  hagoromo: "jagoromo", hamura: "jamura", haku: "jaku", hanabi: "janabi", hidan: "jidan", hiashi: "jiashi",
+  kyubi: "kiubi", hokkaido: "jokaido", shonen: "chonen", shojo: "chojo", shogun: "chogun",
+  xochimilco: "sochimilco", xochitl: "sochitl", xolotl: "solotl", xicotencatl: "sicotencatl", xalapa: "jalapa",
+  oaxaca: "oajaca", tlaxcala: "tlascala", xipe: "sipe",
+};
+
+// Reglas del japonés escrito en romaji -> cómo lo leería un hablante de español
+function respelJp(palabra) {
+  let r = palabra;
+  r = r.replace(/sh(?=[aiueo])/g, "ch").replace(/Sh(?=[aiueo])/g, "Ch");
+  r = r.replace(/(^|[^cCsS])h(?=[aeiouy])/g, "$1j").replace(/^H(?=[aeiouy])/, "J");
+  return r;
+}
+
+function construirPronunciacion(texto, personajes, genero, extraLLM) {
+  const mapa = {};
+  const llm = {};
+  (extraLLM || []).forEach((e) => {
+    if (!e || !e.palabra || !e.suena) return;
+    const suena = String(e.suena).trim();
+    if (!/^[\p{L}\s'’-]{1,40}$/u.test(suena)) return;
+    llm[normalizarTexto(e.palabra)] = suena;
+  });
+  const tokensNombres = new Set();
+  if (genero === "anime") {
+    (personajes || []).forEach((p) => String(p.nombre || "").split(/\s+/).forEach((t) => tokensNombres.add(normalizarTexto(t))));
+  }
+  const vistos = new Set(String(texto).match(/[\p{L}]+/gu) || []);
+  vistos.forEach((tok) => {
+    const n = normalizarTexto(tok);
+    const sing = n.length > 3 && n.endsWith("s") ? n.slice(0, -1) : null;
+    let suena = PRON_BASE[n] || llm[n];
+    if (!suena && sing && (PRON_BASE[sing] || llm[sing])) suena = (PRON_BASE[sing] || llm[sing]) + "s";
+    if (!suena && tokensNombres.has(n)) {
+      const r = respelJp(tok);
+      if (r !== tok) suena = r;
+    }
+    if (suena && normalizarTexto(suena) !== n) {
+      mapa[tok] = tok[0] === tok[0].toUpperCase() ? suena.charAt(0).toUpperCase() + suena.slice(1) : suena;
+    }
+  });
+  return mapa;
 }
 
 // ---------- Nombres de personajes según el tipo de historia ----------
@@ -137,7 +225,7 @@ function reglaNombres(genero) {
     return `Nombres de los personajes (obligatorio): usa los nombres REALES de las personas históricas que participaron (por ejemplo Emiliano Zapata, Francisco Villa, Francisco I. Madero, Miguel Hidalgo, Benito Juárez, según el tema) y respeta los hechos, lugares y fechas reales. Si no estás seguro de un dato, no lo inventes. ${prohibido}`;
   }
   if (genero === "anime") {
-    return `Nombres de los personajes (obligatorio): nombres japoneses completos en letras latinas (romaji), por ejemplo: ${alAzar(NOMBRES_JP, 5).join(", ")}. ${prohibido}`;
+    return `Nombres de los personajes (obligatorio): si el tema menciona un anime, serie o personaje que existe (por ejemplo Naruto, Dragon Ball, One Piece), usa los personajes y nombres REALES de esa obra y respeta su historia. Si no menciona ninguna obra, usa nombres japoneses completos en letras latinas (romaji), por ejemplo: ${alAzar(NOMBRES_JP, 5).join(", ")}. ${prohibido}`;
   }
   return `Nombres de los personajes (obligatorio): nombres de personas reales y comunes, elegidos al azar, por ejemplo: ${alAzar(NOMBRES_ES, 5).join(", ")}. ${prohibido}`;
 }
@@ -306,24 +394,30 @@ async function generarEsquema(env, historia, perfil) {
   const pedido = `Divide esta historia en EXACTAMENTE ${n} escenas para ${perfil.descripcion}, y crea la ficha visual y el gancho de apertura.
 ${fichaHistoria(historia)}
 Formato exacto:
-{"dato_gancho":"","titulo_video":"","personajes":[{"nombre":"","aspecto_en":""}],"escenas":[{"numero":1,"resumen":""}]}
+{"obra":"","dato_gancho":"","titulo_video":"","personajes":[{"nombre":"","aspecto_en":""}],"pronunciacion":[{"palabra":"","suena":""}],"escenas":[{"numero":1,"resumen":""}]}
 Reglas:
+- obra: si la historia trata de un anime, serie, película o videojuego que existe, escribe su nombre (ejemplo: "Naruto"); si no, déjalo vacío.
 - dato_gancho: un dato sorprendente (o una afirmación intrigante si es ficción) sobre la historia, de 12 a 20 palabras, SIN empezar con "¿Sabías que" (ejemplo: "En 1862, un ejército mal armado derrotó a la mayor potencia del mundo.").
 - titulo_video: un título llamativo y corto (3 a 8 palabras) que enganche al público.
-- personajes: para cada personaje, "aspecto_en" es una descripción física en inglés (edad, rostro, cabello, ropa) para que se vea igual en todas las imágenes.
+- personajes: para cada personaje, "aspecto_en" es una descripción física breve en inglés (máximo 25 palabras: edad, rostro, cabello, ropa) para que se vea igual en todas las imágenes. Si el personaje existe en la obra, describe su aspecto OFICIAL y sus rasgos distintivos.
+- pronunciacion: lista (máximo 12) de nombres, lugares o términos que NO son españoles (japonés, inglés, francés, náhuatl, etc.). "suena" es cómo escribirlo para que una voz en español lo pronuncie bien (ejemplos: Hokage -> Jokage, Konoha -> Konoja, Hashirama -> Jashirama).
 - escenas: cada resumen tiene 1 o 2 frases con lo que ocurre; la escena 1 abre la historia, la ${n} es el cierre; la historia avanza con claridad de una escena a la siguiente.`;
 
   const aspectos = {};
   (historia.personajes || []).forEach((p) => {
     if (p && p.nombre) aspectos[normalizar(p.nombre)] = String(p.descripcion || "").slice(0, 160);
   });
+  const nombres = {};
+  (historia.personajes || []).forEach((p) => { if (p && p.nombre) nombres[normalizar(p.nombre)] = String(p.nombre); });
   let beats = null;
   let dato = "";
   let tituloVideo = "";
+  let obra = "";
+  let pron = [];
 
   for (const modelo of MODELOS) {
     try {
-      const obj = await pedirIA(env, modelo, SISTEMA, pedido, 2200);
+      const obj = await pedirIA(env, modelo, SISTEMA, pedido, 2800);
       const res = (obj.escenas || []).map((e) => String(e.resumen || "").trim()).filter(Boolean);
       if (res.length < Math.min(3, n)) continue;
       const base = esquemaBase(n);
@@ -331,15 +425,20 @@ Reglas:
       beats = res.slice(0, n);
       dato = String(obj.dato_gancho || "").trim();
       tituloVideo = String(obj.titulo_video || "").trim();
+      obra = String(obj.obra || "").trim().slice(0, 60);
+      pron = Array.isArray(obj.pronunciacion) ? obj.pronunciacion.slice(0, 12) : [];
       (obj.personajes || []).forEach((p) => {
-        if (p && p.nombre && p.aspecto_en) aspectos[normalizar(p.nombre)] = String(p.aspecto_en).slice(0, 200);
+        if (p && p.nombre && p.aspecto_en) {
+          aspectos[normalizar(p.nombre)] = String(p.aspecto_en).slice(0, 220);
+          nombres[normalizar(p.nombre)] = String(p.nombre);
+        }
       });
       break;
     } catch (_) {}
   }
   if (!dato) dato = primeraFrase(historia.sinopsis || historia.trama || historia.titulo);
   if (!tituloVideo) tituloVideo = historia.titulo || "Sin título";
-  return { beats: beats || esquemaBase(n), aspectos, dato, tituloVideo };
+  return { beats: beats || esquemaBase(n), aspectos, nombres, dato, tituloVideo, obra, pron };
 }
 
 async function generarEscena(env, tema, historia, esquema, n, ficha, perfil, genero) {
@@ -384,25 +483,25 @@ Reglas:
 }
 
 // Reparte las frases de la escena entre sus tomas y arma el prompt final de cada imagen.
-function componerPrompts(e, aspectos, genero, perfil) {
+function componerPrompts(e, ficha, genero, perfil) {
+  const aspectos = ficha.aspectos;
   e.frases = dividirFrases(e.narracion);
   const frases = e.frases;
   let tomas = Array.isArray(e.tomas) ? e.tomas.filter((t) => t && (t.imagen || t.prompt)).slice(0, perfil.tomas) : [];
   if (!tomas.length) tomas = [{ imagen: e.escenografia || "" }];
   const m = tomas.length;
-  const estilo = estiloDe(genero).en;
   e.tomas = tomas.map((t, j) => {
     const desde = Math.floor((j * frases.length) / m);
     const hasta = Math.floor(((j + 1) * frases.length) / m);
     const texto = normalizar(frases.slice(desde, hasta).join(" ") + " " + (t.imagen || ""));
-    const ficha = Object.keys(aspectos)
+    const presentes = Object.keys(aspectos)
       .filter((nombre) => nombre.split(/\s+/).some((w) => w.length >= 4 && texto.includes(w)))
       .slice(0, 2)
-      .map((nombre) => nombre + ": " + aspectos[nombre])
-      .join("; ");
-    const base = String(t.imagen || t.prompt || "").trim();
-    const prompt = (base + "." + (ficha ? " Characters: " + ficha + "." : "") + " " + estilo + ", no text, no letters.").slice(0, 1700);
-    return { imagen: base, prompt, desde, hasta };
+      .map((nombre) => ({ n: (ficha.nombres && ficha.nombres[nombre]) || nombre, a: aspectos[nombre] }));
+    const accion = String(t.imagen || t.prompt || "").trim();
+    const prompt = (accion + "." + (presentes.length ? " Characters: " + presentes.map((p) => p.n + ": " + p.a).join("; ") + "." : "") +
+      (ficha.obra ? " From " + ficha.obra + "." : "") + " " + estiloDe(genero).en + ", no text, no letters.").slice(0, 1700);
+    return { imagen: accion, accion, personajes: presentes, prompt, desde, hasta };
   });
 }
 
@@ -457,7 +556,12 @@ async function generarGuion(env, tema, historia, formato, generoCliente) {
 
   const maxPalabras = Math.floor(perfil.maxSeg * PALABRAS_POR_SEG) - palabrasIntro;
   recortarExceso(escenas, maxPalabras);
-  escenas.forEach((e) => componerPrompts(e, ficha.aspectos, genero, perfil));
+  ficha.obra = ficha.obra || obraDesdeTema(tema, genero);
+  escenas.forEach((e) => componerPrompts(e, ficha, genero, perfil));
+
+  // cómo debe sonar cada palabra extranjera (la voz lee esto; los subtítulos conservan la ortografía real)
+  const textoCompleto = [intro.hablado, intro.titulo].concat(escenas.map((e) => e.narracion)).join(" ");
+  const pronunciacion = construirPronunciacion(textoCompleto, historia.personajes, genero, ficha.pron);
 
   const palabras = escenas.reduce((a, e) => a + palabrasDe(e.narracion), 0) + palabrasIntro;
   const duracion = Math.round(palabras / PALABRAS_POR_SEG);
@@ -467,6 +571,8 @@ async function generarGuion(env, tema, historia, formato, generoCliente) {
     formato: fmt,
     resolucion: perfil.resolucion,
     genero,
+    obra: ficha.obra || "",
+    pronunciacion,
     intro,
     escenas,
     palabras,
@@ -513,24 +619,43 @@ function mimeDe(bytes) {
   return "image/jpeg";
 }
 
+// Cada modelo lee distinto: SDXL solo atiende las primeras ~77 palabras (lo importante va al inicio),
+// y FLUX.2 entiende frases largas y nombres de personajes.
+function armarPrompts(c, estilo) {
+  const accion = String(c.accion || "").trim().slice(0, 400);
+  if (!accion) {
+    const p = String(c.prompt || "").slice(0, 1700);
+    return { largo: p, corto: String(c.prompt || "").slice(0, 240) + ", " + estilo.corto };
+  }
+  const obra = String(c.obra || "").trim().slice(0, 60);
+  const pers = (Array.isArray(c.personajes) ? c.personajes : []).slice(0, 2)
+    .map((p) => ({ n: String((p && p.n) || "").slice(0, 60), a: String((p && p.a) || "").slice(0, 220) }))
+    .filter((p) => p.n);
+  const quien = pers.map((p) => p.n + (obra ? " from " + obra : "")).join(" and ");
+  const detalle = pers.map((p) => p.n + ": " + p.a).join("; ");
+  const estiloObra = obra && !estilo.realista ? obra + " anime style, " : "";
+  const corto = (estiloObra + estilo.corto + ", " + (quien ? quien + ", " : "") + accion).slice(0, 260);
+  const largo = ((quien ? quien + ". " : "") + accion + ". " + (detalle ? detalle + ". " : "") + estiloObra + estilo.en + ", no text, no letters.").slice(0, 1700);
+  return { largo, corto };
+}
+
 // Devuelve { bytes, mime, modelo }. Elige el modelo según el estilo y, si falla, prueba los demás.
-async function generarImagen(env, prompt, genero, formato) {
-  const horizontal = formato === "16:9";
-  const estilo = estiloDe(genero);
-  const texto = String(prompt).slice(0, 1700);
-  const corto = String(prompt).slice(0, 240) + ", " + estilo.en;
+async function generarImagen(env, c) {
+  const horizontal = c.formato === "16:9";
+  const estilo = estiloDe(c.genero);
+  const { largo, corto } = armarPrompts(c, estilo);
   const errores = [];
 
   const klein = ["FLUX.2 klein", async () => {
     const form = new FormData();
-    form.append("prompt", texto);
+    form.append("prompt", largo);
     form.append("width", String(horizontal ? 1024 : 576));
     form.append("height", String(horizontal ? 576 : 1024));
     const fr = new Response(form);
     return env.AI.run(MODELO_KLEIN, { multipart: { body: fr.body, contentType: fr.headers.get("content-type") } });
   }];
   const sdxl = ["SDXL", () => env.AI.run(MODELO_SDXL, {
-    prompt: texto,
+    prompt: corto,
     negative_prompt: estilo.realista
       ? "cartoon, anime, illustration, painting, drawing, deformed face, extra fingers, blurry, text, letters, watermark"
       : "photorealistic, photo, deformed, extra fingers, blurry, text, letters, watermark",
@@ -541,7 +666,9 @@ async function generarImagen(env, prompt, genero, formato) {
   })];
   const flux1 = ["FLUX.1", () => env.AI.run(MODELO_FLUX1, { prompt: corto, steps: 4 })];
 
-  const orden = estilo.realista ? [klein, sdxl, flux1] : [sdxl, klein, flux1];
+  // Si la historia es de una obra conocida, FLUX.2 (que entiende mejor los nombres) va primero.
+  const conObra = !!String(c.obra || "").trim();
+  const orden = estilo.realista || conObra ? [klein, sdxl, flux1] : [sdxl, klein, flux1];
   for (const [nombre, llamar] of orden) {
     try {
       const bytes = await aBytes(await llamar());
@@ -592,8 +719,8 @@ export default {
           return json(await generarGuion(env, tema, cuerpo.historia, formato, cuerpo.genero));
         }
         if (url.pathname === "/api/imagen") {
-          if (!cuerpo.prompt) return json({ error: "Falta el prompt de la imagen" }, 400);
-          const img = await generarImagen(env, cuerpo.prompt, cuerpo.genero, formato);
+          if (!cuerpo.prompt && !cuerpo.accion) return json({ error: "Falta la descripción de la imagen" }, 400);
+          const img = await generarImagen(env, { ...cuerpo, formato });
           return new Response(img.bytes, {
             headers: { "Content-Type": img.mime, "X-Modelo": img.modelo, ...CORS },
           });

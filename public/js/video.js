@@ -80,14 +80,14 @@
   }
 
   // La imagen llega como archivo (no como texto). Reintenta hasta 3 veces.
-  async function pedirImagen(prompt, genero, formato) {
+  async function pedirImagen(tm, genero, formato, obra) {
     let ultimo = null;
     for (let i = 0; i < 3; i++) {
       try {
         const r = await fetch("/api/imagen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt, genero, formato }),
+          body: JSON.stringify({ prompt: tm.prompt, accion: tm.accion, personajes: tm.personajes, obra: obra || "", genero, formato }),
         });
         const tipo = r.headers.get("Content-Type") || "";
         if (!r.ok || tipo.indexOf("image/") !== 0) {
@@ -197,6 +197,13 @@
     }
   }
 
+  // ---------- pronunciación ----------
+  // El guion trae un mapa {palabra: "cómo suena en español"} (ej. Hokage -> Jokage). Solo cambia lo que lee la voz.
+  function paraVoz(texto, mapa) {
+    if (!mapa) return texto;
+    return String(texto).replace(/[\p{L}]+/gu, (w) => (Object.prototype.hasOwnProperty.call(mapa, w) ? mapa[w] : w));
+  }
+
   // ---------- guion -> frases ----------
   function frasesDe(e) {
     if (e.frases && e.frases.length) return e.frases;
@@ -285,6 +292,68 @@
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Reparte las palabras de la frase en el tiempo (según su largo) y las agrupa en "páginas" de hasta 2 líneas.
+  function paginasDe(ctx, lin, anchoMax, fuente) {
+    if (lin._pag && lin._pagAncho === anchoMax && lin._pagFuente === fuente) return lin._pag;
+    ctx.font = fuente;
+    const palabras = String(lin.texto).split(/\s+/).filter(Boolean);
+    const pesos = palabras.map((w) => {
+      const letras = w.replace(/[^\p{L}\p{N}]/gu, "").length;
+      return Math.max(2, letras) + (/[,;:]$/.test(w) ? 2 : 0) + (/[.!?…]["”»)]*$/.test(w) ? 4 : 0);
+    });
+    const suma = pesos.reduce((a, b) => a + b, 0) || 1;
+    const dur = Math.max(0.3, lin.fin - lin.ini);
+    const espacio = ctx.measureText(" ").width;
+    let acum = 0;
+    const items = palabras.map((w, i) => {
+      const it = { w, ancho: ctx.measureText(w).width, t: lin.ini + (dur * acum) / suma };
+      acum += pesos[i];
+      return it;
+    });
+    const paginas = [];
+    let pag = null;
+    items.forEach((it) => {
+      if (!pag) pag = { lineas: [{ palabras: [], ancho: 0 }] };
+      const l = pag.lineas[pag.lineas.length - 1];
+      const extra = (l.palabras.length ? espacio : 0) + it.ancho;
+      if (!l.palabras.length || l.ancho + extra <= anchoMax) { l.palabras.push(it); l.ancho += extra; }
+      else if (pag.lineas.length < 2) pag.lineas.push({ palabras: [it], ancho: it.ancho });
+      else { paginas.push(pag); pag = { lineas: [{ palabras: [it], ancho: it.ancho }] }; }
+    });
+    if (pag) paginas.push(pag);
+    paginas.forEach((p) => { p.t0 = p.lineas[0].palabras[0].t; });
+    lin._pag = { paginas, espacio };
+    lin._pagAncho = anchoMax;
+    lin._pagFuente = fuente;
+    return lin._pag;
+  }
+
+  // Cada palabra aparece cuando la dice el narrador; la palabra actual va resaltada.
+  function dibujarSubtitulo(ctx, lin, t, horizontal) {
+    const fuente = "bold " + (horizontal ? 44 : 40) + "px sans-serif";
+    const { paginas, espacio } = paginasDe(ctx, lin, horizontal ? W - 360 : W - 130, fuente);
+    if (!paginas.length) return;
+    let pag = paginas[0];
+    for (const p of paginas) { if (p.t0 <= t) pag = p; }
+    ctx.font = fuente;
+    ctx.textAlign = "left";
+    const alto = horizontal ? 54 : 50;
+    const base = H - (horizontal ? 58 : 118) - (pag.lineas.length - 1) * alto;
+    const todas = [].concat(...pag.lineas.map((l) => l.palabras));
+    let ultima = -1;
+    todas.forEach((it, i) => { if (it.t <= t) ultima = i; });
+    let k = 0;
+    pag.lineas.forEach((l, li) => {
+      let x = (W - l.ancho) / 2;
+      l.palabras.forEach((it) => {
+        if (it.t <= t) textoConBorde(ctx, it.w, x, base + li * alto, k === ultima ? "#fde047" : "#ffffff");
+        x += it.ancho + espacio;
+        k++;
+      });
+    });
+    ctx.textAlign = "center";
+  }
+
   function dibujarFrame(ctx, estado, t) {
     const { tomas, lineas, total, horizontal } = estado;
 
@@ -338,18 +407,12 @@
       ctx.fillRect(W / 2 - 70, y0 + (ls.length - 1) * alto + 36, 140, 7);
       ctx.globalAlpha = 1;
     } else {
-      // degradado inferior + subtítulo de la narración
-      const deg = ctx.createLinearGradient(0, H * 0.55, 0, H);
+      // degradado suave solo en la franja inferior + subtítulo palabra por palabra
+      const deg = ctx.createLinearGradient(0, H * 0.78, 0, H);
       deg.addColorStop(0, "rgba(11,6,19,0)");
-      deg.addColorStop(1, "rgba(11,6,19,0.88)");
-      ctx.fillStyle = deg; ctx.fillRect(0, H * 0.55, W, H * 0.45);
-      if (lin && lin.tipo === "narracion" && t < lin.fin + 0.3) {
-        ctx.font = "bold " + (horizontal ? 42 : 38) + "px sans-serif";
-        const ls = envolver(ctx, lin.texto, horizontal ? W - 220 : W - 90);
-        const alto = horizontal ? 52 : 46;
-        const base = H - (horizontal ? 70 : 190) - (ls.length - 1) * alto;
-        ls.forEach((l, i) => textoConBorde(ctx, l, W / 2, base + i * alto, "#ffffff"));
-      }
+      deg.addColorStop(1, "rgba(11,6,19,0.7)");
+      ctx.fillStyle = deg; ctx.fillRect(0, H * 0.78, W, H * 0.22);
+      if (lin && lin.tipo === "narracion" && t < lin.fin + 0.3) dibujarSubtitulo(ctx, lin, t, horizontal);
     }
 
     // barra de progreso
@@ -479,6 +542,7 @@
           : [{ prompt: e.prompt_imagen || e.escenografia || g.titulo }];
         lista.forEach((t) => tomas.push({
           si, prompt: t.prompt || t.imagen || e.escenografia || g.titulo, desde: t.desde,
+          accion: t.accion, personajes: t.personajes,
           img: null, fondo: null, mov: null, ini: 0, fin: 0,
         }));
       });
@@ -494,14 +558,14 @@
 
       const tareasImg = tomas.map((tm, i) => async () => {
         try {
-          tm.img = await pedirImagen(tm.prompt, genero, formato);
+          tm.img = await pedirImagen(tm, genero, formato, g.obra);
           if (!coincideProporcion(tm.img)) tm.fondo = fondoDesenfocado(tm.img);
         } catch (e) { erroresImg.push(e.message); }
         avance("Creando imágenes según la acción... (" + (i + 1) + " de " + tomas.length + ")");
       });
       const tareasVoz = items.map((it) => async () => {
         try {
-          const r = await post("/api/voz", { texto: it.texto, lang: "es" });
+          const r = await post("/api/voz", { texto: paraVoz(it.texto, g.pronunciacion), lang: "es" });
           it.buffer = await audio.decodeAudioData(b64ABuffer(r.audio));
         } catch (e) { fallosVoz++; ultimoErrorVoz = e.message; }
         avance("Creando la voz del narrador...");
