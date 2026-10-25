@@ -161,7 +161,7 @@
     iconos();
   }
 
-  function panelListo(panel, url, mime, g, segundos, guardado, rehacer, blob) {
+  function panelListo(panel, url, mime, g, segundos, guardado, rehacer, blob, rep) {
     const horizontal = (g.formato || "9:16") === "16:9";
     const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
     const nombre = (g.titulo || "video").toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, "-").replace(/^-+|-+$/g, "") + "." + ext;
@@ -175,6 +175,8 @@
           <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="circle-check" class="w-5 h-5 text-purple-400"></i> ¡Tu video está listo!</p>
           <p class="text-sm text-purple-300">${W}×${H} (${esc(g.formato || "9:16")}) · ${Math.floor(segundos / 60)}:${String(Math.round(segundos) % 60).padStart(2, "0")} min · formato ${esc(ext.toUpperCase())}</p>
           ${guardado ? '<p class="flex items-center gap-1.5 text-sm text-purple-200"><i data-lucide="circle-check" class="w-4 h-4 text-purple-400"></i> Guardado en Mis videos</p>' : ""}
+          ${rep && rep.reparado ? '<p class="flex items-center gap-1.5 text-sm text-purple-200"><i data-lucide="shield-check" class="w-4 h-4 text-purple-400"></i> Archivo verificado: dura ' + Math.floor(rep.duracion / 60) + ":" + String(Math.round(rep.duracion) % 60).padStart(2, "0") + " en cualquier app</p>" : ""}
+          ${rep && !rep.reparado && rep.motivo ? '<p class="text-xs text-yellow-200">No se pudo reparar el archivo (' + esc(rep.motivo) + "). Si otra app lo lee más corto, usa “Hacer otra versión”.</p>" : ""}
           <div class="flex flex-wrap gap-3">
             <a href="${url}" download="${esc(nombre)}" class="flex items-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 px-5 py-2.5 font-semibold text-white brillo">
               <i data-lucide="download" class="w-4 h-4"></i> Descargar</a>
@@ -582,18 +584,25 @@
       rec.stop();
       await terminado;
 
-      const tipo = rec.mimeType || mime || "video/webm";
-      const blob = new Blob(trozos, { type: tipo });
+      const tipoCrudo = rec.mimeType || mime || "video/webm";
+      const crudo = new Blob(trozos, { type: tipoCrudo });
+      // El archivo que graba el navegador no trae la duración en la cabecera (otras apps lo leen como 3 s): se repara.
+      ui.set("Preparando el archivo para que dure completo en cualquier app...", 100, "");
+      const rep = window.ArreglarVideo
+        ? await window.ArreglarVideo.reparar(crudo, totalSeg)
+        : { blob: crudo, reparado: false, duracion: totalSeg };
+      const blob = rep.blob;
+      const tipo = blob.type || tipoCrudo;
       const url = URL.createObjectURL(blob);
       let guardado = false;
       if (opts.id && window.Almacen) {
-        try { await window.Almacen.guardarVideo(opts.id, blob, tipo); guardado = true; } catch (_) {}
+        try { await window.Almacen.guardarVideo(opts.id, blob, tipo, rep.reparado); guardado = true; } catch (_) {}
       }
       const rehacer = () => {
         const nuevoAudio = new (window.AudioContext || window.webkitAudioContext)();
         generar(g, panel, { audio: nuevoAudio, id: opts.id });
       };
-      panelListo(panel, url, tipo, g, totalSeg, guardado, rehacer, blob);
+      panelListo(panel, url, tipo, g, totalSeg, guardado, rehacer, blob, rep);
 
       const avisos = [];
       if (fallidas) {

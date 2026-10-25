@@ -10,8 +10,7 @@ class AppHeader extends HTMLElement {
             <i data-lucide="clapperboard" class="w-6 h-6 text-white"></i>
           </span>
           <span class="min-w-0">
-            <span class="block font-bold text-lg leading-tight truncate">Generador de Videos IA</span>
-            <span class="block text-xs sm:text-sm text-purple-300 truncate">Historias, narración y video con IA</span>
+            <span class="block font-extrabold text-2xl leading-tight tracking-tight truncate">KreaVid</span>
           </span>
         </a>
         <span class="hidden sm:flex items-center gap-1.5 rounded-full border border-purple-400/40 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-200 shrink-0">

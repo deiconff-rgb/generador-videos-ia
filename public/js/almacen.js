@@ -25,7 +25,7 @@
   }
 
   window.Almacen = {
-    guardarVideo: (id, blob, mime) => operar("readwrite", (s) => s.put({ id: Number(id), blob, mime, fecha: Date.now() })),
+    guardarVideo: (id, blob, mime, reparado) => operar("readwrite", (s) => s.put({ id: Number(id), blob, mime, reparado: !!reparado, fecha: Date.now() })),
     obtenerVideo: (id) => operar("readonly", (s) => s.get(Number(id))),
     borrarVideo: (id) => operar("readwrite", (s) => s.delete(Number(id))),
     idsConVideo: () => operar("readonly", (s) => s.getAllKeys()).then((a) => a || []),

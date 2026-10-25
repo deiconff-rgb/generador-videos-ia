@@ -95,8 +95,18 @@
         const reg = await window.Almacen.obtenerVideo(id);
         const g0 = leer().find((x) => String(x.id) === id);
         if (!reg) { cont.textContent = "No se encontró el video en este dispositivo."; return; }
-        const url = URL.createObjectURL(reg.blob);
-        const ext = String(reg.mime || "").indexOf("mp4") >= 0 ? "mp4" : "webm";
+        let blob = reg.blob;
+        let mimeFinal = reg.mime;
+        if (!reg.reparado && window.ArreglarVideo) {
+          cont.textContent = "Preparando el archivo...";
+          const r = await window.ArreglarVideo.reparar(reg.blob, 0);
+          if (r.reparado) {
+            blob = r.blob; mimeFinal = r.blob.type;
+            try { await window.Almacen.guardarVideo(id, blob, mimeFinal, true); } catch (_) {}
+          }
+        }
+        const url = URL.createObjectURL(blob);
+        const ext = String(mimeFinal || "").indexOf("mp4") >= 0 ? "mp4" : "webm";
         cont.innerHTML = `<video src="${url}" controls playsinline class="rounded-2xl border border-purple-500/40 bg-black"
             style="aspect-ratio:${(g0 && g0.formato === "16:9") ? "16/9" : "9/16"}; max-height:70vh; width:${(g0 && g0.formato === "16:9") ? "100%" : "auto"}; max-width:100%"></video>
           <a href="${url}" download="video-${esc(id)}.${ext}" class="mt-2 inline-flex items-center gap-2 rounded-xl border border-purple-400/50 px-4 py-2 text-sm text-purple-100 hover:bg-purple-500/20">
@@ -105,7 +115,7 @@
         const g = leer().find((x) => String(x.id) === id) || {};
         if (window.Publicar) {
           window.Publicar.montar(document.getElementById("pp-" + id), {
-            blob: reg.blob, mime: reg.mime, nombre: "video-" + id + "." + ext,
+            blob: blob, mime: mimeFinal, nombre: "video-" + id + "." + ext,
             titulo: g.titulo, descripcion: g.sinopsis, tema: g.tema, formato: g.formato || "9:16",
           });
         }
