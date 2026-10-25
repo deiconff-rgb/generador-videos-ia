@@ -40,11 +40,13 @@
         const fecha = new Date(g.fecha).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
         const escenas = (g.escenas || []).map((e, i) =>
           `<div class="mb-2"><p class="text-xs font-semibold text-purple-300">Escena ${esc(e.numero || i + 1)}</p>` +
-          (e.dialogos || []).map((d) =>
-            `<p class="text-sm"><span class="font-semibold text-purple-300">${esc(d.personaje)}:</span> ${esc(d.texto)}</p>`).join("") +
+          (e.narracion
+            ? `<p class="text-sm">${esc(e.narracion)}</p>`
+            : (e.dialogos || []).map((d) =>
+                `<p class="text-sm"><span class="font-semibold text-purple-300">${esc(d.personaje)}:</span> ${esc(d.texto)}</p>`).join("")) +
           `</div>`).join("");
         return `<article class="flex gap-3 rounded-2xl border border-purple-500/30 bg-purple-950/40 p-4">
-          <div class="shrink-0 w-16 aspect-[9/16] rounded-lg bg-gradient-to-b from-purple-500 to-fuchsia-600 flex items-center justify-center brillo">
+          <div class="shrink-0 ${g.formato === "16:9" ? "w-24 aspect-video" : "w-16 aspect-[9/16]"} rounded-lg bg-gradient-to-b from-purple-500 to-fuchsia-600 flex items-center justify-center brillo">
             <i data-lucide="${tiene ? "play" : "file-text"}" class="w-6 h-6 text-white"></i></div>
           <div class="min-w-0 flex-1">
             <h3 class="font-bold leading-snug">${esc(g.titulo)}</h3>
@@ -91,11 +93,12 @@
       const cont = document.getElementById("vv-" + id);
       try {
         const reg = await window.Almacen.obtenerVideo(id);
+        const g0 = leer().find((x) => String(x.id) === id);
         if (!reg) { cont.textContent = "No se encontró el video en este dispositivo."; return; }
         const url = URL.createObjectURL(reg.blob);
         const ext = String(reg.mime || "").indexOf("mp4") >= 0 ? "mp4" : "webm";
         cont.innerHTML = `<video src="${url}" controls playsinline class="rounded-2xl border border-purple-500/40 bg-black"
-            style="aspect-ratio:9/16; max-height:70vh; width:auto; max-width:100%"></video>
+            style="aspect-ratio:${(g0 && g0.formato === "16:9") ? "16/9" : "9/16"}; max-height:70vh; width:${(g0 && g0.formato === "16:9") ? "100%" : "auto"}; max-width:100%"></video>
           <a href="${url}" download="video-${esc(id)}.${ext}" class="mt-2 inline-flex items-center gap-2 rounded-xl border border-purple-400/50 px-4 py-2 text-sm text-purple-100 hover:bg-purple-500/20">
             <i data-lucide="download" class="w-4 h-4"></i> Descargar</a>`;
         if (window.lucide) lucide.createIcons();
@@ -103,7 +106,7 @@
         if (window.Publicar) {
           window.Publicar.montar(document.getElementById("pp-" + id), {
             blob: reg.blob, mime: reg.mime, nombre: "video-" + id + "." + ext,
-            titulo: g.titulo, descripcion: g.sinopsis, tema: g.tema,
+            titulo: g.titulo, descripcion: g.sinopsis, tema: g.tema, formato: g.formato || "9:16",
           });
         }
       } catch (_) { cont.textContent = "No se pudo abrir el video."; }

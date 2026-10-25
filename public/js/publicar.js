@@ -19,7 +19,7 @@
   function leyenda(d) {
     const sin = String(d.descripcion || "").trim();
     const corta = sin.length > 180 ? sin.slice(0, 177).replace(/\s+\S*$/, "") + "..." : sin;
-    const tags = ["#Shorts", "#Reels", "#TikTok", "#Historias"];
+    const tags = d.formato === "16:9" ? ["#YouTube", "#Video"] : ["#Shorts", "#Reels", "#TikTok"];
     const t = etiqueta(d.tema);
     if (t) tags.push("#" + t);
     return [d.titulo, corta, tags.join(" ")].filter(Boolean).join("\n\n");
@@ -51,16 +51,33 @@
     const caja = cont.querySelector("#pLeyenda");
 
     cont.querySelector("#pEnviar").addEventListener("click", async () => {
+      if (!navigator.share) {
+        msg.textContent = "Este navegador no tiene menú de compartir. Toca Descargar y súbelo desde la app o con los enlaces de abajo.";
+        return;
+      }
+      // El navegador solo acepta tipos simples ("video/mp4"); el grabador agrega parámetros de códec que provocan "Permission denied".
+      const tipo = String(datos.mime || "video/mp4").split(";")[0] || "video/mp4";
+      const ext = tipo.indexOf("mp4") >= 0 ? "mp4" : "webm";
+      const nombre = String(datos.nombre || "video").replace(/\.(mp4|webm)$/i, "") + "." + ext;
+      const limpio = datos.blob.type === tipo ? datos.blob : datos.blob.slice(0, datos.blob.size, tipo);
+      const archivo = new File([limpio], nombre, { type: tipo });
+
+      if (navigator.canShare && !navigator.canShare({ files: [archivo] })) {
+        msg.textContent = "Este navegador no permite compartir archivos de video (" + tipo + "). Toca Descargar y súbelo desde la app.";
+        return;
+      }
       try {
-        const archivo = new File([datos.blob], datos.nombre || "video.mp4", { type: datos.mime });
-        if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
-          await navigator.share({ files: [archivo], title: datos.titulo, text: caja.value });
-          msg.textContent = "Listo. Si la app no trae el texto, toca “Copiar texto” y pégalo en la descripción.";
-        } else {
-          msg.textContent = "Este navegador no permite enviar archivos desde aquí. Descarga el video y súbelo con los enlaces de abajo.";
+        await navigator.share({ files: [archivo], title: datos.titulo, text: caja.value });
+        msg.textContent = "Listo. Si la app no trae el texto, toca “Copiar texto” y pégalo en la descripción.";
+      } catch (e1) {
+        if (e1 && e1.name === "AbortError") return;
+        try {
+          await navigator.share({ files: [archivo] });          // segundo intento, solo el archivo
+          msg.textContent = "Listo. Toca “Copiar texto” y pégalo en la descripción de la app.";
+        } catch (e2) {
+          if (e2 && e2.name === "AbortError") return;
+          msg.textContent = "Tu navegador bloqueó el menú de compartir (" + ((e2 && e2.name) || "error") + "). Toca Descargar y súbelo desde la galería o con los enlaces de abajo.";
         }
-      } catch (e) {
-        if (!e || e.name !== "AbortError") msg.textContent = "No se pudo abrir el menú de compartir: " + (e && e.message ? e.message : e);
       }
     });
 

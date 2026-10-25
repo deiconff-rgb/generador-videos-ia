@@ -27,11 +27,22 @@
 
       <div id="chips" class="flex flex-wrap gap-2 mt-3"></div>
 
-      <ul class="mt-4 space-y-1.5 text-sm text-purple-200">
-        <li class="flex items-center gap-2"><i data-lucide="smartphone" class="w-4 h-4 text-purple-400"></i> Formato vertical 9:16 (1080×1920)</li>
-        <li class="flex items-center gap-2"><i data-lucide="clock" class="w-4 h-4 text-purple-400"></i> Guion para 2 minutos o más</li>
-        <li class="flex items-center gap-2"><i data-lucide="map-pin" class="w-4 h-4 text-purple-400"></i> Con escenografía detallada por escena</li>
-      </ul>
+      <p class="flex items-center gap-2 font-semibold text-purple-200 mt-5 mb-2">
+        <i data-lucide="monitor-smartphone" class="w-5 h-5 text-purple-400"></i> Tipo de video
+      </p>
+      <div id="formatos" class="grid grid-cols-2 gap-2">
+        <button type="button" data-formato="9:16" class="formato">
+          <i data-lucide="smartphone" class="w-6 h-6"></i>
+          <span class="font-bold">9:16 Vertical</span>
+          <span class="text-xs opacity-80">Reels · Shorts · TikTok</span>
+        </button>
+        <button type="button" data-formato="16:9" class="formato">
+          <i data-lucide="monitor" class="w-6 h-6"></i>
+          <span class="font-bold">16:9 Horizontal</span>
+          <span class="text-xs opacity-80">YouTube</span>
+        </button>
+      </div>
+      <ul id="infoFormato" class="mt-3 space-y-1.5 text-sm text-purple-200"></ul>
 
       <button id="btnGenerar"
         class="mt-5 w-full flex items-center justify-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 active:scale-[.99] transition font-semibold py-3 text-white brillo disabled:opacity-60">

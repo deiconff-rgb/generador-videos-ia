@@ -1,13 +1,18 @@
-// Generador de video 9:16 dentro del navegador (sin servidor de video).
-// Flujo: una imagen por "toma" (según la acción del guion) + voz por diálogo
-//        -> se dibuja en un canvas con movimiento de cámara y subtítulos -> MediaRecorder lo graba.
+// Generador de video dentro del navegador (sin servidor de video).
+// Formatos: 9:16 (720x1280, máx. 1 min) y 16:9 (1280x720, 4 a 5 min).
+// Flujo: una imagen por "toma" (según la acción del guion) + voz de narrador por frase
+//        -> canvas con movimiento de cámara, subtítulos y música -> MediaRecorder lo graba.
 (function () {
   "use strict";
 
-  const W = 720;          // 9:16 -> 720 x 1280
-  const H = 1280;
+  const CONF = {
+    "9:16": { W: 720, H: 1280, bitrate: 2500000, maxSeg: 60 },
+    "16:9": { W: 1280, H: 720, bitrate: 1800000, maxSeg: 300 },
+  };
+  let W = 720;            // se ajustan al formato elegido
+  let H = 1280;
   const FPS = 30;
-  const PAUSA = 0.35;     // segundos entre diálogos
+  const PAUSA = 0.3;      // segundos entre frases
   const FADE = 0.5;       // segundos de transición entre tomas
   const PALABRAS_POR_SEG = 2.5;
 
@@ -17,6 +22,8 @@
     );
   const iconos = () => { if (window.lucide) lucide.createIcons(); };
   const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
+  const limitar = (x, a, b) => Math.max(a, Math.min(b, x));
+  const contarPalabras = (t) => String(t || "").trim().split(/\s+/).filter(Boolean).length;
 
   let enCurso = false;
 
@@ -29,6 +36,17 @@
     { z0: 1.25, z1: 1.25, x0: 0,    x1: 0,   y0: 1,    y1: -1 },   // inclinar hacia arriba
     { z0: 1.0,  z1: 1.30, x0: -0.6, x1: 0.6, y0: -0.6, y1: 0.6 },  // acercar en diagonal
   ];
+
+  // Música de fondo generada en el navegador (acordes suaves según el tipo de historia).
+  const ACORDES = {
+    historia: [[146.83, 174.61, 220.0], [116.54, 146.83, 174.61], [174.61, 220.0, 261.63], [130.81, 164.81, 196.0]],
+    terror:   [[110.0, 130.81, 155.56], [92.5, 110.0, 130.81], [82.41, 116.54, 146.83], [110.0, 130.81, 155.56]],
+    misterio: [[110.0, 130.81, 164.81], [98.0, 116.54, 146.83], [87.31, 130.81, 155.56], [110.0, 130.81, 164.81]],
+    anime:    [[130.81, 164.81, 196.0], [98.0, 123.47, 146.83], [110.0, 130.81, 164.81], [87.31, 110.0, 130.81]],
+    comedia:  [[196.0, 246.94, 293.66], [174.61, 220.0, 261.63], [196.0, 246.94, 293.66], [130.81, 164.81, 196.0]],
+    scifi:    [[110.0, 164.81, 220.0], [87.31, 130.81, 174.61], [130.81, 196.0, 261.63], [98.0, 146.83, 196.0]],
+    general:  [[110.0, 130.81, 164.81], [87.31, 110.0, 130.81], [130.81, 164.81, 196.0], [98.0, 123.47, 146.83]],
+  };
 
   // ---------- red ----------
   async function post(ruta, cuerpo) {
@@ -62,14 +80,14 @@
   }
 
   // La imagen llega como archivo (no como texto). Reintenta hasta 3 veces.
-  async function pedirImagen(prompt) {
+  async function pedirImagen(prompt, genero, formato) {
     let ultimo = null;
     for (let i = 0; i < 3; i++) {
       try {
         const r = await fetch("/api/imagen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({ prompt, genero, formato }),
         });
         const tipo = r.headers.get("Content-Type") || "";
         if (!r.ok || tipo.indexOf("image/") !== 0) {
@@ -97,8 +115,8 @@
     await Promise.all(Array.from({ length: Math.min(limite, tareas.length) }, trabajador));
   }
 
-  // ---------- panel de progreso ----------
-  const PASOS = ["Guion", "Imágenes y voces", "Grabación", "Listo"];
+  // ---------- paneles ----------
+  const PASOS = ["Guion", "Imágenes y voz", "Grabación", "Listo"];
 
   function panelProgreso(panel) {
     panel.innerHTML = `
@@ -143,16 +161,19 @@
     iconos();
   }
 
-  function panelListo(panel, url, mime, titulo, segundos, guardado, rehacer, extra) {
+  function panelListo(panel, url, mime, g, segundos, guardado, rehacer, blob) {
+    const horizontal = (g.formato || "9:16") === "16:9";
     const ext = mime.indexOf("mp4") >= 0 ? "mp4" : "webm";
-    const nombre = (titulo || "video").toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, "-").replace(/^-+|-+$/g, "") + "." + ext;
+    const nombre = (g.titulo || "video").toLowerCase().replace(/[^a-z0-9áéíóúñ]+/gi, "-").replace(/^-+|-+$/g, "") + "." + ext;
+    const estiloVideo = horizontal
+      ? "aspect-ratio:16/9; width:100%; max-height:70vh"
+      : "aspect-ratio:9/16; max-height:75vh; width:auto; max-width:100%";
     panel.innerHTML = `
-      <div class="grid gap-5 lg:grid-cols-[auto_1fr] items-start">
-        <video src="${url}" controls playsinline class="mx-auto rounded-2xl border border-purple-500/40 bg-black brillo"
-               style="aspect-ratio:9/16; max-height:75vh; width:auto; max-width:100%"></video>
+      <div class="grid gap-5 ${horizontal ? "" : "lg:grid-cols-[auto_1fr]"} items-start">
+        <video src="${url}" controls playsinline class="mx-auto rounded-2xl border border-purple-500/40 bg-black brillo" style="${estiloVideo}"></video>
         <div class="space-y-3 min-w-0">
           <p class="flex items-center gap-2 font-semibold text-lg"><i data-lucide="circle-check" class="w-5 h-5 text-purple-400"></i> ¡Tu video está listo!</p>
-          <p class="text-sm text-purple-300">${W}×${H} (9:16) · ~${Math.round(segundos)} s · formato ${esc(ext.toUpperCase())}</p>
+          <p class="text-sm text-purple-300">${W}×${H} (${esc(g.formato || "9:16")}) · ${Math.floor(segundos / 60)}:${String(Math.round(segundos) % 60).padStart(2, "0")} min · formato ${esc(ext.toUpperCase())}</p>
           ${guardado ? '<p class="flex items-center gap-1.5 text-sm text-purple-200"><i data-lucide="circle-check" class="w-4 h-4 text-purple-400"></i> Guardado en Mis videos</p>' : ""}
           <div class="flex flex-wrap gap-3">
             <a href="${url}" download="${esc(nombre)}" class="flex items-center gap-2 rounded-xl bg-purple-500 hover:bg-purple-400 px-5 py-2.5 font-semibold text-white brillo">
@@ -167,28 +188,22 @@
     iconos();
     const otra = panel.querySelector("#vRehacer");
     if (otra && rehacer) otra.addEventListener("click", rehacer);
-    if (window.Publicar && extra && extra.blob) {
+    if (window.Publicar && blob) {
       window.Publicar.montar(panel.querySelector("#vPublicar"), {
-        blob: extra.blob, mime, nombre, titulo, descripcion: extra.descripcion, tema: extra.tema,
+        blob, mime, nombre, titulo: g.titulo, descripcion: g.sinopsis || "", tema: g.tema || "", formato: g.formato || "9:16",
       });
     }
   }
 
-  // ---------- voces: velocidad distinta por personaje ----------
-  // MeloTTS tiene una sola voz; para diferenciar personajes se cambia un poco la velocidad/tono.
-  function velocidades(personajes) {
-    const mapa = {};
-    let h = 0, m = 0;
-    (personajes || []).forEach((p) => {
-      const mujer = String(p.genero || "").toLowerCase().startsWith("muj");
-      if (mujer) { mapa[p.nombre] = 1.10 - 0.05 * m; m++; }
-      else { mapa[p.nombre] = 0.92 + 0.05 * h; h++; }
-    });
-    return mapa;
+  // ---------- guion -> frases ----------
+  function frasesDe(e) {
+    if (e.frases && e.frases.length) return e.frases;
+    if (e.narracion) return String(e.narracion).split(/(?<=[.!?…])\s+/).filter(Boolean);
+    return (e.dialogos || []).map((d) => String(d.texto || ""));      // guiones antiguos con diálogos
   }
 
   // ---------- dibujo ----------
-  // Para imágenes cuadradas (respaldo FLUX): fondo desenfocado de la misma imagen.
+  // Si la imagen no tiene la misma proporción del video: fondo desenfocado de la misma imagen.
   function fondoDesenfocado(img) {
     const c = document.createElement("canvas");
     c.width = W; c.height = H;
@@ -203,7 +218,9 @@
     return c;
   }
 
-  function esVertical(img) { return img.width / img.height < 0.8; }
+  function coincideProporcion(img) {
+    return Math.abs(img.width / img.height / (W / H) - 1) < 0.18;
+  }
 
   function envolver(ctx, texto, ancho) {
     const palabras = String(texto).split(/\s+/);
@@ -240,79 +257,137 @@
     const img = toma.img;
     const mov = toma.mov;
     const e = p * p * (3 - 2 * p);                 // arranque y frenado suaves
-    const vertical = esVertical(img);
+    const coincide = coincideProporcion(img);
 
     let bw, bh;
-    if (vertical) {
+    if (coincide) {
       const k = Math.max(W / img.width, H / img.height);
       bw = img.width * k; bh = img.height * k;     // cubre todo el cuadro
     } else {
       if (toma.fondo) ctx.drawImage(toma.fondo, 0, 0, W, H);
-      bw = W; bh = (W * img.height) / img.width;
+      const k = Math.min(W / img.width, H / img.height);
+      bw = img.width * k; bh = img.height * k;
     }
     const z = mov.z0 + (mov.z1 - mov.z0) * e;
     const w = bw * z, h = bh * z;
     const px = mov.x0 + (mov.x1 - mov.x0) * e;
     const py = mov.y0 + (mov.y1 - mov.y0) * e;
     const left = (W - w) / 2 + (px * Math.max(0, w - W)) / 2;
-    const top = vertical ? (H - h) / 2 + (py * Math.max(0, h - H)) / 2 : (H - h) / 2 - 90;
+    let top = (H - h) / 2 + (py * Math.max(0, h - H)) / 2;
+    if (!coincide && W < H) top -= 90;
     ctx.drawImage(img, left, top, w, h);
   }
 
+  function oscurecer(ctx, alfa) {
+    ctx.fillStyle = "rgba(8,3,16," + alfa + ")";
+    ctx.fillRect(0, 0, W, H);
+  }
+
   function dibujarFrame(ctx, estado, t) {
-    const { tomas, lineas, titulo, total } = estado;
+    const { tomas, lineas, total, horizontal } = estado;
 
     // toma activa
     let k = tomas.length - 1;
     for (let i = 0; i < tomas.length; i++) { if (t < tomas[i].fin) { k = i; break; } }
     const tk = tomas[k];
-    const p = Math.max(0, Math.min(1, (t - tk.ini) / Math.max(0.1, tk.fin - tk.ini)));
+    const p = limitar((t - tk.ini) / Math.max(0.1, tk.fin - tk.ini), 0, 1);
 
     ctx.fillStyle = "#0b0613";
     ctx.fillRect(0, 0, W, H);
     if (k > 0 && t - tk.ini < FADE) {              // transición suave entre tomas
       dibujarToma(ctx, tomas[k - 1], 1);
-      ctx.globalAlpha = Math.max(0, Math.min(1, (t - tk.ini) / FADE));
+      ctx.globalAlpha = limitar((t - tk.ini) / FADE, 0, 1);
       dibujarToma(ctx, tk, p);
       ctx.globalAlpha = 1;
     } else {
       dibujarToma(ctx, tk, p);
     }
 
-    // degradado inferior para los subtítulos
-    const deg = ctx.createLinearGradient(0, H * 0.55, 0, H);
-    deg.addColorStop(0, "rgba(11,6,19,0)");
-    deg.addColorStop(1, "rgba(11,6,19,0.88)");
-    ctx.fillStyle = deg; ctx.fillRect(0, H * 0.55, W, H * 0.45);
+    // línea activa (la última que ya empezó)
+    let lin = null;
+    for (let i = 0; i < lineas.length; i++) { if (lineas[i].ini <= t) lin = lineas[i]; else break; }
 
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
+    const anchoTexto = horizontal ? W - 300 : W - 110;
 
-    // título al inicio
-    if (t < 3.2) {
-      ctx.globalAlpha = t < 2.6 ? 1 : Math.max(0, (3.2 - t) / 0.6);
-      ctx.font = "bold 46px sans-serif";
-      const ls = envolver(ctx, titulo, W - 100);
-      ls.forEach((l, i) => textoConBorde(ctx, l, W / 2, 130 + i * 56, "#ffffff"));
+    if (lin && lin.tipo === "gancho" && t < lin.fin + 0.45) {
+      const a = limitar((t - lin.ini) / 0.6, 0, 1);
+      oscurecer(ctx, 0.58 * a);
+      ctx.globalAlpha = a;
+      const y0 = H * 0.40 + (1 - a) * 26;
+      try { ctx.letterSpacing = "6px"; } catch (_) {}
+      ctx.font = "bold 34px sans-serif";
+      textoConBorde(ctx, "¿SABÍAS QUE…?", W / 2, y0, "#d8b4fe");
+      try { ctx.letterSpacing = "0px"; } catch (_) {}
+      ctx.font = "bold " + (horizontal ? 56 : 52) + "px sans-serif";
+      envolver(ctx, lin.dato || lin.texto, anchoTexto).forEach((l, i) => textoConBorde(ctx, l, W / 2, y0 + 84 + i * 66, "#ffffff"));
       ctx.globalAlpha = 1;
-    }
-
-    // subtítulo activo
-    const lin = lineas.find((l) => t >= l.ini && t < l.fin + PAUSA);
-    if (lin) {
-      ctx.font = "bold 38px sans-serif";
-      const ls = envolver(ctx, lin.texto, W - 90);
-      const alto = 46;
-      const base = H - 190 - (ls.length - 1) * alto;
-      ctx.font = "bold 30px sans-serif";
-      textoConBorde(ctx, String(lin.personaje || "").toUpperCase(), W / 2, base - 52, "#d8b4fe");
-      ctx.font = "bold 38px sans-serif";
-      ls.forEach((l, i) => textoConBorde(ctx, l, W / 2, base + i * alto, "#ffffff"));
+    } else if (lin && lin.tipo === "titulo" && t < lin.fin + 0.6) {
+      const a = limitar((t - lin.ini) / 0.6, 0, 1);
+      oscurecer(ctx, 0.62 * a);
+      ctx.globalAlpha = a;
+      const ls = (() => { ctx.font = "bold " + (horizontal ? 70 : 60) + "px sans-serif"; return envolver(ctx, String(lin.titulo || lin.texto).toUpperCase(), anchoTexto); })();
+      const alto = horizontal ? 80 : 72;
+      const y0 = H / 2 - ((ls.length - 1) * alto) / 2 + (1 - a) * 22;
+      ctx.fillStyle = "#a855f7";
+      ctx.fillRect(W / 2 - 70, y0 - 90, 140, 7);
+      ls.forEach((l, i) => textoConBorde(ctx, l, W / 2, y0 + i * alto, "#ffffff"));
+      ctx.fillRect(W / 2 - 70, y0 + (ls.length - 1) * alto + 36, 140, 7);
+      ctx.globalAlpha = 1;
+    } else {
+      // degradado inferior + subtítulo de la narración
+      const deg = ctx.createLinearGradient(0, H * 0.55, 0, H);
+      deg.addColorStop(0, "rgba(11,6,19,0)");
+      deg.addColorStop(1, "rgba(11,6,19,0.88)");
+      ctx.fillStyle = deg; ctx.fillRect(0, H * 0.55, W, H * 0.45);
+      if (lin && lin.tipo === "narracion" && t < lin.fin + 0.3) {
+        ctx.font = "bold " + (horizontal ? 42 : 38) + "px sans-serif";
+        const ls = envolver(ctx, lin.texto, horizontal ? W - 220 : W - 90);
+        const alto = horizontal ? 52 : 46;
+        const base = H - (horizontal ? 70 : 190) - (ls.length - 1) * alto;
+        ls.forEach((l, i) => textoConBorde(ctx, l, W / 2, base + i * alto, "#ffffff"));
+      }
     }
 
     // barra de progreso
     ctx.fillStyle = "rgba(255,255,255,0.18)"; ctx.fillRect(0, H - 8, W, 8);
     ctx.fillStyle = "#a855f7"; ctx.fillRect(0, H - 8, W * Math.min(1, t / total), 8);
+  }
+
+  // ---------- música de fondo ----------
+  function musicaFondo(audio, destino, t0, dur, genero) {
+    const acordes = ACORDES[genero] || ACORDES.general;
+    const master = audio.createGain();
+    master.gain.value = 0.6;
+    const filtro = audio.createBiquadFilter();
+    filtro.type = "lowpass";
+    filtro.frequency.value = 1100;
+    master.connect(filtro);
+    filtro.connect(destino);
+    master.gain.setValueAtTime(0.6, t0 + Math.max(0, dur - 2.5));
+    master.gain.linearRampToValueAtTime(0.0001, t0 + dur);
+
+    const paso = 8;
+    const n = Math.ceil(dur / paso) + 1;
+    for (let i = 0; i < n; i++) {
+      const ini = Math.max(audio.currentTime, t0 + i * paso - 1);
+      const fin = ini + paso + 2;
+      acordes[i % acordes.length].forEach((f, k) => {
+        const osc = audio.createOscillator();
+        osc.type = k === 0 ? "sine" : "triangle";
+        osc.frequency.value = f;
+        const g = audio.createGain();
+        g.gain.setValueAtTime(0.0001, ini);
+        g.gain.linearRampToValueAtTime(0.05, ini + 2.5);
+        g.gain.setValueAtTime(0.05, fin - 2.5);
+        g.gain.linearRampToValueAtTime(0.0001, fin);
+        osc.connect(g);
+        g.connect(master);
+        osc.start(ini);
+        osc.stop(fin + 0.1);
+      });
+    }
   }
 
   // ---------- grabación ----------
@@ -327,6 +402,39 @@
     return opciones.find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
   }
 
+  // Línea de tiempo: cuándo suena cada frase y cuándo cambia cada toma. "factor" acelera la narración si hace falta.
+  function construirTimeline(escenasG, items, tomas, factor) {
+    let t = 0.5;
+    const lineas = [];
+    const inicioFrase = {};
+    const inicioEscena = [];
+    escenasG.forEach((_, si) => {
+      inicioEscena[si] = si === 0 ? 0 : t;
+      items.filter((it) => it.si === si).forEach((it) => {
+        const dur = it.buffer
+          ? it.buffer.duration / factor
+          : Math.max(1.5, contarPalabras(it.texto) / PALABRAS_POR_SEG / factor);
+        lineas.push({ ini: t, fin: t + dur, tipo: it.tipo, texto: it.texto, dato: it.dato, titulo: it.titulo, buffer: it.buffer, rate: factor });
+        if (it.tipo === "narracion") inicioFrase[si + ":" + it.k] = t;
+        t += dur + (it.tipo === "gancho" ? 0.5 : it.tipo === "titulo" ? 0.7 : PAUSA / factor);
+      });
+      if (t - inicioEscena[si] < 2) t = inicioEscena[si] + 2;
+    });
+    escenasG.forEach((e, si) => {
+      const mias = tomas.filter((x) => x.si === si);
+      const L = frasesDe(e).length;
+      mias.forEach((x, j) => {
+        let desde = x.desde != null ? x.desde : Math.floor((j * L) / mias.length);
+        x.ini = j === 0 ? inicioEscena[si]
+          : (inicioFrase[si + ":" + desde] != null ? inicioFrase[si + ":" + desde]
+            : inicioEscena[si] + ((inicioEscena[si + 1] != null ? inicioEscena[si + 1] : t) - inicioEscena[si]) * (j / mias.length));
+      });
+    });
+    const total = t + 0.8;
+    tomas.forEach((x, i) => { x.fin = i + 1 < tomas.length ? Math.max(tomas[i + 1].ini, x.ini + 0.5) : total; });
+    return { lineas, total };
+  }
+
   // ---------- proceso principal ----------
   async function generar(g, panel, opts) {
     opts = opts || {};
@@ -337,6 +445,12 @@
     if (enCurso) return;
     enCurso = true;
 
+    const formato = g.formato === "16:9" ? "16:9" : "9:16";
+    const conf = CONF[formato];
+    W = conf.W; H = conf.H;
+    const horizontal = formato === "16:9";
+    const genero = g.genero || "general";
+
     // El AudioContext se crea de inmediato (dentro del toque del usuario) para que el navegador lo permita.
     const audio = opts.audio || new (window.AudioContext || window.webkitAudioContext)();
     const ui = panelProgreso(panel);
@@ -345,12 +459,15 @@
 
     try {
       const escenasG = g.escenas || [];
-      const velo = velocidades(g.personajes);
 
-      // diálogos
+      // frases que se leen en voz alta: primero el gancho y el título, luego la narración
       const items = [];
-      escenasG.forEach((e, si) => (e.dialogos || []).forEach((d) =>
-        items.push({ si, personaje: d.personaje, texto: String(d.texto || ""), buffer: null })));
+      if (g.intro && g.intro.hablado) {
+        items.push({ tipo: "gancho", si: 0, texto: g.intro.hablado, dato: g.intro.dato, buffer: null });
+        if (g.intro.titulo) items.push({ tipo: "titulo", si: 0, texto: g.intro.titulo, titulo: g.intro.titulo, buffer: null });
+      }
+      escenasG.forEach((e, si) => frasesDe(e).forEach((f, k) =>
+        items.push({ tipo: "narracion", si, k, texto: String(f), buffer: null })));
 
       // tomas: cada una es una imagen que sigue la acción de esa parte de la escena
       const tomas = [];
@@ -359,7 +476,7 @@
           ? e.tomas
           : [{ prompt: e.prompt_imagen || e.escenografia || g.titulo }];
         lista.forEach((t) => tomas.push({
-          si, prompt: t.prompt || t.imagen || e.escenografia || g.titulo,
+          si, prompt: t.prompt || t.imagen || e.escenografia || g.titulo, desde: t.desde,
           img: null, fondo: null, mov: null, ini: 0, fin: 0,
         }));
       });
@@ -371,12 +488,12 @@
       const avance = (texto) => { hechos++; ui.set(texto, (hechos / total) * 70, hechos + " de " + total + " elementos listos"); };
 
       ui.paso(1);
-      ui.set("Creando imágenes y voces...", 0, "0 de " + total + " elementos listos");
+      ui.set("Creando imágenes y voz...", 0, "0 de " + total + " elementos listos");
 
       const tareasImg = tomas.map((tm, i) => async () => {
         try {
-          tm.img = await pedirImagen(tm.prompt);
-          if (!esVertical(tm.img)) tm.fondo = fondoDesenfocado(tm.img);
+          tm.img = await pedirImagen(tm.prompt, genero, formato);
+          if (!coincideProporcion(tm.img)) tm.fondo = fondoDesenfocado(tm.img);
         } catch (e) { erroresImg.push(e.message); }
         avance("Creando imágenes según la acción... (" + (i + 1) + " de " + tomas.length + ")");
       });
@@ -385,7 +502,7 @@
           const r = await post("/api/voz", { texto: it.texto, lang: "es" });
           it.buffer = await audio.decodeAudioData(b64ABuffer(r.audio));
         } catch (e) { fallosVoz++; ultimoErrorVoz = e.message; }
-        avance("Creando voces...");
+        avance("Creando la voz del narrador...");
       });
       await Promise.all([enParalelo(tareasImg, 2), enParalelo(tareasVoz, 3)]);
 
@@ -404,36 +521,21 @@
       });
       tomas.forEach((x, i) => { x.mov = MOVS[i % MOVS.length]; });
 
-      // línea de tiempo
-      let t = 0.6;
-      const lineas = [];
-      escenasG.forEach((e, si) => {
-        const iniEscena = si === 0 ? 0 : t;
-        const its = items.filter((it) => it.si === si);
-        const inicios = [];
-        its.forEach((it) => {
-          const rate = velo[it.personaje] || 1;
-          const palabras = it.texto.trim().split(/\s+/).filter(Boolean).length;
-          const dur = it.buffer ? it.buffer.duration / rate : Math.max(2, palabras / PALABRAS_POR_SEG);
-          inicios.push(t);
-          lineas.push({ ini: t, fin: t + dur, personaje: it.personaje, texto: it.texto, buffer: it.buffer, rate });
-          t += dur + PAUSA;
-        });
-        if (t - iniEscena < 2) t = iniEscena + 2;
-        const mias = tomas.filter((x) => x.si === si);
-        mias.forEach((x, j) => {
-          const k = its.length ? Math.floor((j * its.length) / mias.length) : 0;
-          x.ini = j === 0 ? iniEscena : (its.length ? inicios[k] : iniEscena + ((t - iniEscena) * j) / mias.length);
-        });
-      });
-      const totalSeg = t + 0.8;
-      tomas.forEach((x, i) => { x.fin = i + 1 < tomas.length ? tomas[i + 1].ini : totalSeg; });
+      // línea de tiempo (si se pasa del límite del formato, se acelera un poco la voz)
+      let tl = construirTimeline(escenasG, items, tomas, 1);
+      let factor = 1;
+      if (tl.total > conf.maxSeg) {
+        factor = Math.min(1.2, tl.total / conf.maxSeg);
+        tl = construirTimeline(escenasG, items, tomas, factor);
+      }
+      const totalSeg = tl.total;
+      const lineas = tl.lineas;
 
       // canvas + grabadora
       const canvas = document.createElement("canvas");
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext("2d");
-      const estado = { tomas, lineas, titulo: g.titulo || "", total: totalSeg };
+      const estado = { tomas, lineas, total: totalSeg, horizontal };
 
       const destino = audio.createMediaStreamDestination();
       const flujo = canvas.captureStream(FPS);
@@ -441,7 +543,7 @@
 
       const mime = elegirFormato();
       const rec = new MediaRecorder(flujo, Object.assign(
-        { videoBitsPerSecond: 2500000, audioBitsPerSecond: 128000 },
+        { videoBitsPerSecond: conf.bitrate, audioBitsPerSecond: 128000 },
         mime ? { mimeType: mime } : {}
       ));
       const trozos = [];
@@ -450,6 +552,7 @@
 
       await audio.resume();
       const t0 = audio.currentTime + 0.3;
+      try { musicaFondo(audio, destino, t0, totalSeg, genero); } catch (_) {}
       lineas.forEach((l) => {
         if (!l.buffer) return;
         const src = audio.createBufferSource();
@@ -490,18 +593,19 @@
         const nuevoAudio = new (window.AudioContext || window.webkitAudioContext)();
         generar(g, panel, { audio: nuevoAudio, id: opts.id });
       };
-      panelListo(panel, url, tipo, g.titulo, totalSeg, guardado, rehacer,
-        { blob, descripcion: g.sinopsis || "", tema: g.tema || opts.tema || "" });
+      panelListo(panel, url, tipo, g, totalSeg, guardado, rehacer, blob);
 
       const avisos = [];
       if (fallidas) {
         const detalle = erroresImg.length ? " Motivo: " + erroresImg[0] : "";
         avisos.push(fallidas + " de " + tomas.length + " imagen(es) no se pudieron crear y se reutilizó otra." + detalle);
       }
-      if (fallosVoz) avisos.push(fallosVoz + " voz/voces no se pudieron crear y esas líneas salen solo con subtítulo");
+      if (fallosVoz) avisos.push(fallosVoz + " frase(s) no tuvieron voz y salen solo con subtítulo.");
+      if (factor > 1) avisos.push("La narración se aceleró un " + Math.round((factor - 1) * 100) + "% para respetar el límite de " + Math.round(conf.maxSeg / 60) + " min.");
+      if (tl.total > conf.maxSeg * 1.05) avisos.push("El video quedó de " + Math.round(totalSeg) + " s, por encima del límite de " + conf.maxSeg + " s.");
       if (avisos.length) {
         panel.insertAdjacentHTML("beforeend",
-          `<p class="mt-3 text-xs text-yellow-200 break-words">Aviso: ${esc(avisos.join("; "))} Puedes volver a generar el video.</p>`);
+          `<p class="mt-3 text-xs text-yellow-200 break-words">Aviso: ${esc(avisos.join(" "))} Puedes volver a generar el video.</p>`);
       }
     } catch (e) {
       panelError(panel, "No se pudo generar el video: " + e.message);

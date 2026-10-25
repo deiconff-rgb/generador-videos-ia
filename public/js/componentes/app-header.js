@@ -11,11 +11,11 @@ class AppHeader extends HTMLElement {
           </span>
           <span class="min-w-0">
             <span class="block font-bold text-lg leading-tight truncate">Generador de Videos IA</span>
-            <span class="block text-xs sm:text-sm text-purple-300 truncate">Historias, voz y video vertical</span>
+            <span class="block text-xs sm:text-sm text-purple-300 truncate">Historias, narración y video con IA</span>
           </span>
         </a>
         <span class="hidden sm:flex items-center gap-1.5 rounded-full border border-purple-400/40 bg-purple-500/10 px-3 py-1.5 text-sm text-purple-200 shrink-0">
-          <i data-lucide="smartphone" class="w-4 h-4"></i> 9:16 · Reels · Shorts · TikTok
+          <i data-lucide="smartphone" class="w-4 h-4"></i> 9:16 y 16:9 · Reels · Shorts · TikTok · YouTube
         </span>
       </div>
     </header>`;
