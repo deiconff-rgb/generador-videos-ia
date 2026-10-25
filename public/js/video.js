@@ -80,14 +80,14 @@
   }
 
   // La imagen llega como archivo (no como texto). Reintenta hasta 3 veces.
-  async function pedirImagen(tm, genero, formato, obra) {
+  async function pedirImagen(tm, genero, formato, obra, motor) {
     let ultimo = null;
     for (let i = 0; i < 3; i++) {
       try {
         const r = await fetch("/api/imagen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: tm.prompt, accion: tm.accion, personajes: tm.personajes, obra: obra || "", genero, formato }),
+          body: JSON.stringify({ prompt: tm.prompt, accion: tm.accion, personajes: tm.personajes, obra: obra || "", genero, formato, motor: motor || "flux2" }),
         });
         const tipo = r.headers.get("Content-Type") || "";
         if (!r.ok || tipo.indexOf("image/") !== 0) {
@@ -95,7 +95,10 @@
           try { msg = (await r.json()).error || msg; } catch (_) {}
           throw new Error(msg);
         }
-        return await cargarImagenBlob(await r.blob());
+        const modelo = r.headers.get("X-Modelo") || "";
+        let intentos = "";
+        try { intentos = decodeURIComponent(r.headers.get("X-Intentos") || ""); } catch (_) {}
+        return { img: await cargarImagenBlob(await r.blob()), modelo, intentos };
       } catch (e) {
         ultimo = e;
         if (i < 2) await esperar(1500 * (i + 1));
@@ -551,6 +554,7 @@
       let hechos = 0;
       let fallosVoz = 0, ultimoErrorVoz = "";
       const erroresImg = [];
+      const motivosModelo = [];
       const avance = (texto) => { hechos++; ui.set(texto, (hechos / total) * 70, hechos + " de " + total + " elementos listos"); };
 
       ui.paso(1);
@@ -558,7 +562,10 @@
 
       const tareasImg = tomas.map((tm, i) => async () => {
         try {
-          tm.img = await pedirImagen(tm, genero, formato, g.obra);
+          const r = await pedirImagen(tm, genero, formato, g.obra, g.motor);
+          tm.img = r.img;
+          tm.modelo = r.modelo;
+          if (r.intentos) motivosModelo.push(r.intentos);
           if (!coincideProporcion(tm.img)) tm.fondo = fondoDesenfocado(tm.img);
         } catch (e) { erroresImg.push(e.message); }
         avance("Creando imágenes según la acción... (" + (i + 1) + " de " + tomas.length + ")");
@@ -667,6 +674,19 @@
         generar(g, panel, { audio: nuevoAudio, id: opts.id });
       };
       panelListo(panel, url, tipo, g, totalSeg, guardado, rehacer, blob, rep);
+
+      // qué modelo creó cada imagen (para saber si se usó el de mayor calidad)
+      const usados = {};
+      tomas.forEach((x) => { if (x.modelo) usados[x.modelo] = (usados[x.modelo] || 0) + 1; });
+      const resumen = Object.keys(usados).map((k) => k + " ×" + usados[k]).join(", ");
+      const respaldo = tomas.filter((x) => x.modelo && x.modelo !== "FLUX.2 klein").length;
+      if (resumen) {
+        panel.insertAdjacentHTML("beforeend", `<p class="mt-3 text-xs text-purple-300 break-words">Imágenes creadas con: ${esc(resumen)}.</p>`);
+      }
+      if (respaldo && g.motor !== "sdxl") {
+        const motivo = motivosModelo[0] ? " Motivo: " + motivosModelo[0] : "";
+        panel.insertAdjacentHTML("beforeend", `<p class="mt-2 text-xs text-yellow-200 break-words">En ${respaldo} imagen(es) no estuvo disponible FLUX.2 (la de mayor calidad) y se usó un modelo de respaldo, por eso pueden verse peor.${esc(motivo)}</p>`);
+      }
 
       const avisos = [];
       if (fallidas) {

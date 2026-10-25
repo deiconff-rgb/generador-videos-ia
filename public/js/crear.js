@@ -24,7 +24,13 @@
     "16:9": { resolucion: "1280×720", info: ["Horizontal para YouTube", "Entre 4 y 5 minutos", "Unas 20 imágenes con movimiento"] },
   };
 
+  const CALIDADES = {
+    flux2: "Mejores rostros y personajes. Gasta más del cupo diario gratuito; si se agota, usa SDXL automáticamente.",
+    sdxl: "Casi no gasta cupo, pero los rostros y los personajes salen peor.",
+  };
+
   let formato = "9:16";
+  let motor = "flux2";
   let generoActual = "general";
   let historias = [];
   let elegida = -1;
@@ -112,6 +118,16 @@
     $("infoFormato").innerHTML = FORMATOS[formato].info.map((t) =>
       `<li class="flex items-center gap-2"><i data-lucide="check" class="w-4 h-4 text-purple-400"></i> ${esc(t)}</li>`).join("");
     iconos();
+  }
+
+  function pintarCalidad() {
+    document.querySelectorAll(".calidad").forEach((b) => {
+      const on = b.getAttribute("data-motor") === motor;
+      b.className = "calidad flex flex-col items-center gap-0.5 rounded-xl border px-3 py-2.5 text-center transition " +
+        (on ? "border-purple-400 bg-purple-500/30 text-white brillo" : "border-purple-500/30 bg-purple-900/30 text-purple-200 hover:bg-purple-500/15");
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    $("infoCalidad").textContent = CALIDADES[motor];
   }
 
   // ---------- historias ----------
@@ -296,6 +312,7 @@
     g.personajes = h.personajes || [];
     g.sinopsis = h.sinopsis || "";
     g.tema = temaActual;
+    g.motor = motor;
     ultimoGuion = g;
     ultimoId = guardarGuion(g);
     estado();
@@ -358,6 +375,12 @@
     formato = b.getAttribute("data-formato");
     pintarFormato();
   });
+  $("calidades").addEventListener("click", (e) => {
+    const b = e.target.closest(".calidad");
+    if (!b) return;
+    motor = b.getAttribute("data-motor");
+    pintarCalidad();
+  });
   $("resultados").addEventListener("click", (e) => {
     const b = e.target.closest(".elegir");
     if (b) elegir(parseInt(b.getAttribute("data-i"), 10));
@@ -373,6 +396,7 @@
 
   pintarChips();
   pintarFormato();
+  pintarCalidad();
   pintarVacio();
   iconos();
 })();

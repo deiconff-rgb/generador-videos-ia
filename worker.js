@@ -66,8 +66,8 @@ const ESTILOS = {
   anime: {
     realista: false,
     narrador: "narrador de una serie de anime: épico, emotivo y lleno de energía",
-    corto: "anime screenshot, 2D cel shaded, vibrant colors",
-    en: "high quality anime illustration, clean line art, vibrant colors, cel shading, expressive anime characters, dramatic cinematic lighting, detailed background",
+    corto: "anime screenshot, solo, one character, 2D cel shaded",
+    en: "high quality anime illustration, clean line art, vibrant colors, cel shading, one expressive character in focus, dramatic cinematic lighting, detailed background",
   },
   comedia: {
     realista: false,
@@ -132,7 +132,78 @@ const FRANQUICIAS = [
   ["evangelion", "Neon Genesis Evangelion"], ["cowboy bebop", "Cowboy Bebop"], ["haikyuu", "Haikyu!!"],
   ["black clover", "Black Clover"], ["caballeros del zodiaco", "Saint Seiya"], ["saint seiya", "Saint Seiya"],
   ["digimon", "Digimon"], ["inuyasha", "Inuyasha"], ["jojo", "JoJo's Bizarre Adventure"],
+  ["hokage", "Naruto"], ["konoha", "Naruto"], ["shinobi", "Naruto"], ["akatsuki", "Naruto"], ["sharingan", "Naruto"],
+  ["rasengan", "Naruto"], ["jinchuriki", "Naruto"], ["goku", "Dragon Ball"], ["saiyajin", "Dragon Ball"],
+  ["luffy", "One Piece"], ["mugiwara", "One Piece"], ["tanjiro", "Demon Slayer"], ["eren yeager", "Attack on Titan"],
 ];
+
+function obraConocida(texto) {
+  const n = normalizarTexto(texto);
+  for (const [clave, nombre] of FRANQUICIAS) if (n.includes(clave)) return nombre;
+  return "";
+}
+
+// Estilo de dibujo de cada obra (ayuda a que se vea como el anime original)
+const ESTILO_OBRA = {
+  "Naruto": "Studio Pierrot anime style, Naruto Shippuden art style, bold clean outlines, flat cel shading",
+  "Dragon Ball": "Toei Animation style, Akira Toriyama character design, bold outlines",
+  "One Piece": "Toei Animation style, Eiichiro Oda character design, expressive outlines",
+  "Demon Slayer": "ufotable anime style, detailed linework, dramatic lighting",
+  "Attack on Titan": "WIT Studio anime style, gritty detailed linework",
+  "My Hero Academia": "Bones studio anime style, Kohei Horikoshi character design",
+  "Death Note": "Madhouse anime style, dark moody linework",
+};
+
+// Aspecto oficial de personajes muy conocidos (la IA de texto a veces se equivoca con ellos)
+const CANON = [
+  [["naruto uzumaki", "naruto"], "spiky blond hair, blue eyes, three whisker marks on each cheek, orange and black jumpsuit, Hidden Leaf village forehead protector"],
+  [["sasuke uchiha", "sasuke"], "spiky black hair, black eyes, blue high-collared shirt, Hidden Leaf forehead protector"],
+  [["sakura haruno", "sakura"], "short pink hair, green eyes, red top, forehead protector worn as a headband"],
+  [["kakashi hatake", "kakashi"], "spiky silver hair, face mask covering nose and mouth, forehead protector tilted over left eye, green flak jacket"],
+  [["hashirama senju", "hashirama"], "long dark brown hair, red and white samurai-style armor, Hidden Leaf forehead protector"],
+  [["tobirama senju", "tobirama"], "short spiky white hair, two red marks on each cheek, blue armor, forehead protector"],
+  [["madara uchiha", "madara"], "long spiky black hair, red samurai armor with a fan emblem, red Sharingan eyes"],
+  [["itachi uchiha", "itachi"], "long black hair tied low, deep tear-trough lines under the eyes, black Akatsuki cloak with red clouds"],
+  [["minato namikaze", "minato"], "spiky yellow hair with two long bangs, white Hokage cloak with red flames, Leaf forehead protector"],
+  [["hiruzen sarutobi", "hiruzen"], "elderly man with a wrinkled face, red and white Hokage hat and robe, smoking a pipe"],
+  [["tsunade"], "blonde hair in two low ponytails, purple diamond mark on forehead, green coat"],
+  [["jiraiya"], "long spiky white hair, red lines on the cheeks, green kimono, forehead protector"],
+  [["orochimaru"], "very pale skin, long straight black hair, yellow snake eyes with purple markings"],
+  [["gaara"], "short red hair, dark rings around the eyes, love kanji on the forehead, sand gourd on the back"],
+  [["hinata hyuga", "hinata"], "long dark blue hair with straight bangs, pale lavender eyes, light jacket"],
+  [["rock lee"], "bowl-cut black hair, thick eyebrows, green jumpsuit, orange leg warmers"],
+  [["shikamaru nara", "shikamaru"], "black hair in a tall ponytail, scar on the chin, Leaf flak jacket"],
+  [["neji hyuga", "neji"], "long dark brown hair tied low, pale eyes, white robes, forehead protector"],
+  [["goku", "son goku"], "spiky black hair, orange martial arts gi with blue undershirt and belt"],
+  [["vegeta"], "tall upswept black hair with a widow's peak, blue Saiyan battle suit with white armor"],
+  [["piccolo"], "tall green-skinned alien, white cape and turban, purple gi"],
+  [["bulma"], "turquoise hair, pink outfit"],
+  [["krillin", "krilin"], "bald head with six dots on the forehead, orange gi"],
+  [["monkey d. luffy", "luffy"], "messy black hair, straw hat, scar under the left eye, open red vest, blue shorts"],
+  [["roronoa zoro", "zoro"], "short green hair, three swords, green haramaki, scar over the left eye"],
+  [["sanji"], "blond hair covering the left eye, black suit, curly eyebrow, cigarette"],
+  [["usopp"], "long nose, curly black hair, goggles on the head, overalls"],
+  [["tanjiro kamado", "tanjiro"], "reddish-black hair, burn scar on the forehead, hanafuda earrings, green and black checkered haori"],
+  [["nezuko kamado", "nezuko"], "long black hair with orange tips, pink eyes, bamboo muzzle, pink kimono"],
+  [["zenitsu agatsuma", "zenitsu"], "yellow hair, yellow haori with a lightning-like pattern"],
+  [["inosuke hashibira", "inosuke"], "boar head mask, bare muscular torso, fur pants"],
+  [["eren yeager", "eren jaeger"], "messy brown hair, green eyes, Survey Corps uniform and green cloak"],
+  [["mikasa ackerman", "mikasa"], "short black hair, red scarf, Survey Corps jacket"],
+  [["levi ackerman", "levi"], "short black undercut hair, grey eyes, white cravat, Survey Corps uniform"],
+  [["izuku midoriya", "deku"], "messy green hair with freckles, green hero costume with red shoes"],
+  [["katsuki bakugo", "bakugo"], "spiky ash-blond hair, red eyes, black tank top with orange gauntlets"],
+  [["ash ketchum", "ash"], "black hair, red and white cap, blue jacket"],
+  [["pikachu"], "small yellow mouse with red cheeks and a lightning bolt tail"],
+];
+
+function buscarCanon(nombre) {
+  const n = normalizarTexto(nombre).trim();
+  if (!n) return "";
+  for (const [alias, desc] of CANON) {
+    if (alias.some((a) => n === a || n.startsWith(a + " ") || n.endsWith(" " + a))) return desc;
+  }
+  return "";
+}
 
 function normalizarTexto(t) {
   return String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -494,10 +565,19 @@ function componerPrompts(e, ficha, genero, perfil) {
     const desde = Math.floor((j * frases.length) / m);
     const hasta = Math.floor(((j + 1) * frases.length) / m);
     const texto = normalizar(frases.slice(desde, hasta).join(" ") + " " + (t.imagen || ""));
+    // personajes que aparecen en este tramo, en el orden en que se mencionan (el primero es el protagonista de la imagen)
     const presentes = Object.keys(aspectos)
-      .filter((nombre) => nombre.split(/\s+/).some((w) => w.length >= 4 && texto.includes(w)))
+      .map((nombre) => {
+        const posiciones = nombre.split(/\s+/).filter((w) => w.length >= 4).map((w) => texto.indexOf(w)).filter((p) => p >= 0);
+        return { nombre, pos: posiciones.length ? Math.min(...posiciones) : -1 };
+      })
+      .filter((x) => x.pos >= 0)
+      .sort((a, b) => a.pos - b.pos)
       .slice(0, 2)
-      .map((nombre) => ({ n: (ficha.nombres && ficha.nombres[nombre]) || nombre, a: aspectos[nombre] }));
+      .map((x) => {
+        const mostrado = (ficha.nombres && ficha.nombres[x.nombre]) || x.nombre;
+        return { n: mostrado, a: buscarCanon(mostrado) || aspectos[x.nombre] };
+      });
     const accion = String(t.imagen || t.prompt || "").trim();
     const prompt = (accion + "." + (presentes.length ? " Characters: " + presentes.map((p) => p.n + ": " + p.a).join("; ") + "." : "") +
       (ficha.obra ? " From " + ficha.obra + "." : "") + " " + estiloDe(genero).en + ", no text, no letters.").slice(0, 1700);
@@ -556,7 +636,9 @@ async function generarGuion(env, tema, historia, formato, generoCliente) {
 
   const maxPalabras = Math.floor(perfil.maxSeg * PALABRAS_POR_SEG) - palabrasIntro;
   recortarExceso(escenas, maxPalabras);
-  ficha.obra = ficha.obra || obraDesdeTema(tema, genero);
+  const nombresPers = (historia.personajes || []).map((p) => p.nombre).join(" ");
+  ficha.obra = obraConocida([tema, historia.titulo, historia.sinopsis, nombresPers, ficha.obra].join(" ")) ||
+    ficha.obra || obraDesdeTema(tema, genero);
   escenas.forEach((e) => componerPrompts(e, ficha, genero, perfil));
 
   // cómo debe sonar cada palabra extranjera (la voz lee esto; los subtítulos conservan la ortografía real)
@@ -631,11 +713,18 @@ function armarPrompts(c, estilo) {
   const pers = (Array.isArray(c.personajes) ? c.personajes : []).slice(0, 2)
     .map((p) => ({ n: String((p && p.n) || "").slice(0, 60), a: String((p && p.a) || "").slice(0, 220) }))
     .filter((p) => p.n);
-  const quien = pers.map((p) => p.n + (obra ? " from " + obra : "")).join(" and ");
-  const detalle = pers.map((p) => p.n + ": " + p.a).join("; ");
-  const estiloObra = obra && !estilo.realista ? obra + " anime style, " : "";
-  const corto = (estiloObra + estilo.corto + ", " + (quien ? quien + ", " : "") + accion).slice(0, 260);
-  const largo = ((quien ? quien + ". " : "") + accion + ". " + (detalle ? detalle + ". " : "") + estiloObra + estilo.en + ", no text, no letters.").slice(0, 1700);
+  const estiloObra = obra && !estilo.realista ? (ESTILO_OBRA[obra] || obra + " anime style") + ", " : "";
+
+  // SDXL solo atiende las primeras ~77 palabras y tiende a hacer collages si ve varios nombres:
+  // estilo + UN protagonista con su aspecto + la acción.
+  const p0 = pers[0];
+  const quien0 = p0 ? p0.n + (obra ? " (" + obra + ")" : "") + (p0.a ? ", " + p0.a.slice(0, 110) : "") : "";
+  const corto = (estiloObra + estilo.corto + (quien0 ? ", " + quien0 : "") + ", " + accion).slice(0, 300);
+
+  // FLUX.2 entiende frases largas: protagonista primero, con su aspecto oficial.
+  const prin = pers.map((p) => p.n + (obra ? " from " + obra : "") + (p.a ? " (" + p.a + ")" : "")).join(", and ");
+  const largo = ((prin ? prin + ". " : "") + accion + ". Focus on the main character, single clear composition, no collage, no crowd of faces. " +
+    estiloObra + estilo.en + ", no text, no letters.").slice(0, 1700);
   return { largo, corto };
 }
 
@@ -649,16 +738,16 @@ async function generarImagen(env, c) {
   const klein = ["FLUX.2 klein", async () => {
     const form = new FormData();
     form.append("prompt", largo);
-    form.append("width", String(horizontal ? 1024 : 576));
-    form.append("height", String(horizontal ? 576 : 1024));
+    form.append("width", String(horizontal ? 1024 : 768));
+    form.append("height", String(horizontal ? 576 : 1344));
     const fr = new Response(form);
     return env.AI.run(MODELO_KLEIN, { multipart: { body: fr.body, contentType: fr.headers.get("content-type") } });
   }];
   const sdxl = ["SDXL", () => env.AI.run(MODELO_SDXL, {
     prompt: corto,
     negative_prompt: estilo.realista
-      ? "cartoon, anime, illustration, painting, drawing, deformed face, extra fingers, blurry, text, letters, watermark"
-      : "photorealistic, photo, deformed, extra fingers, blurry, text, letters, watermark",
+      ? "cartoon, anime, illustration, painting, drawing, collage, crowd, deformed face, extra fingers, blurry, text, letters, watermark"
+      : "photorealistic, photo, 3d render, collage, poster, multiple characters, group, crowd, duplicate faces, deformed, extra limbs, blurry, low quality, text, letters, watermark",
     width: horizontal ? 1344 : 768,
     height: horizontal ? 768 : 1344,
     num_steps: IMG_STEPS,
@@ -666,14 +755,13 @@ async function generarImagen(env, c) {
   })];
   const flux1 = ["FLUX.1", () => env.AI.run(MODELO_FLUX1, { prompt: corto, steps: 4 })];
 
-  // Si la historia es de una obra conocida, FLUX.2 (que entiende mejor los nombres) va primero.
-  const conObra = !!String(c.obra || "").trim();
-  const orden = estilo.realista || conObra ? [klein, sdxl, flux1] : [sdxl, klein, flux1];
+  // FLUX.2 va primero (mejor con personajes y rostros). Con motor "sdxl" se usa el modelo gratuito y rápido.
+  const orden = c.motor === "sdxl" ? [sdxl, flux1] : [klein, sdxl, flux1];
   for (const [nombre, llamar] of orden) {
     try {
       const bytes = await aBytes(await llamar());
       if (bytes.length < 1000) throw new Error("Imagen vacía");
-      return { bytes, mime: mimeDe(bytes), modelo: nombre };
+      return { bytes, mime: mimeDe(bytes), modelo: nombre, intentos: errores.join(" | ") };
     } catch (e) {
       errores.push(nombre + ": " + String((e && e.message) || e).slice(0, 160));
     }
@@ -722,7 +810,7 @@ export default {
           if (!cuerpo.prompt && !cuerpo.accion) return json({ error: "Falta la descripción de la imagen" }, 400);
           const img = await generarImagen(env, { ...cuerpo, formato });
           return new Response(img.bytes, {
-            headers: { "Content-Type": img.mime, "X-Modelo": img.modelo, ...CORS },
+            headers: { "Content-Type": img.mime, "X-Modelo": img.modelo, "X-Intentos": encodeURIComponent(img.intentos || ""), ...CORS },
           });
         }
         if (url.pathname === "/api/voz") {
